@@ -6,11 +6,12 @@
   "scripts": {
     "start": "ts-node src/index.ts",
     "dev": "ts-node src/index.ts",
-    "test": "node -r ts-node/register --test src/features/events/domain/event.entity.test.ts src/features/events/usecases/events.usecase.test.ts"
+    "test": "node -r ts-node/register --test src/features/events/domain/event.entity.test.ts src/features/events/usecases/events.usecase.test.ts src/features/events/infrastructure/firestore-event.mapper.test.ts"
   },
   "packageManager": "pnpm@10.22.0",
   "dependencies": {
-    "@scifamek-open-source/iraca": "^9.3.5"
+    "@scifamek-open-source/iraca": "^9.3.5",
+    "firebase-admin": "^14.3.0"
   },
   "devDependencies": {
     "@types/node": "22.10.2",
