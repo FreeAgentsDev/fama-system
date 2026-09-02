@@ -94,6 +94,34 @@ export interface ReserveTicketInput {
   phone: string;
 }
 
+export type ScanOutcome =
+  | { kind: "admitted"; attendeeName: string }
+  | { kind: "exited"; attendeeName: string }
+  | { kind: "rejected"; reason: "voided" | "not-found" };
+
+interface ScanTicketResponseTicket {
+  attendeeName: string;
+}
+
+/** Llamado desde `/puerta` (scanner). El código viene del QR: `TQT-XXXXXXXX`. */
+export async function scanTicket(code: string, gate?: string): Promise<ScanOutcome> {
+  const result = await postToIraca<{ ticket?: ScanTicketResponseTicket }>("/events/scan-ticket", {
+    code,
+    gate,
+  });
+  const eventName = eventNameOf(result.meta.code);
+  switch (eventName) {
+    case "TicketAdmittedDomainEvent":
+      return { kind: "admitted", attendeeName: result.data.ticket!.attendeeName };
+    case "TicketExitedDomainEvent":
+      return { kind: "exited", attendeeName: result.data.ticket!.attendeeName };
+    case "TicketVoidedDomainEvent":
+      return { kind: "rejected", reason: "voided" };
+    default:
+      return { kind: "rejected", reason: "not-found" };
+  }
+}
+
 export async function reserveTicket(input: ReserveTicketInput): Promise<ReservedTicket> {
   const result = await postToIraca<{ event: PublicEvent; ticket: ReservedTicket }>(
     "/events/reserve-ticket",
