@@ -1,5 +1,6 @@
 import { DomainEventKind } from "@scifamek-open-source/iraca/domain";
 import {
+  AdminEventSummary,
   BoxOfficeStats,
   Event,
   GateScan,
@@ -96,4 +97,21 @@ export const PaymentAlreadyProcessedDomainEvent = DomainEventKind<{ ticketId: st
 /** El `internalSecret` de ConfirmPaymentParam no coincide: alguien intenta llamar el endpoint sin pasar por el webhook de Wompi. */
 export const PaymentConfirmationUnauthorizedDomainEvent = DomainEventKind<{ reason: string }>(
   "PaymentConfirmationUnauthorizedDomainEvent",
+);
+
+/** `/admin/eventos` — lista liviana de TODOS los eventos (publicados, agotados y ocultos). */
+export const GottenAdminEventsDomainEvent = DomainEventKind<AdminEventSummary[]>(
+  "GottenAdminEventsDomainEvent",
+);
+
+/** Emitido por IssueCourtesyTicketUsecase (Fase 4) — boleta gratis creada desde el admin. */
+export const CourtesyTicketIssuedDomainEvent = DomainEventKind<{
+  event: PublicEvent;
+  ticket: Ticket;
+  whatsappLink: string;
+}>("CourtesyTicketIssuedDomainEvent");
+
+/** Emitido por PublishEventUsecase (Fase 4) — reversa de EventCancelledDomainEvent ("Ocultar"). */
+export const EventPublishedDomainEvent = DomainEventKind<PublicEvent>(
+  "EventPublishedDomainEvent",
 );
