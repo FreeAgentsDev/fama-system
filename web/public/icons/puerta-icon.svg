@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" fill="#0a0a0a" />
+  <rect x="16" y="16" width="160" height="160" rx="24" fill="#171717" stroke="#fbbf24" stroke-width="4" />
+  <!-- Marco de escaneo -->
+  <g fill="none" stroke="#fbbf24" stroke-width="7" stroke-linecap="round">
+    <path d="M60 48 H48 a8 8 0 0 0 -8 8 v12" />
+    <path d="M132 48 h12 a8 8 0 0 1 8 8 v12" />
+    <path d="M60 144 H48 a8 8 0 0 1 -8 -8 v-12" />
+    <path d="M132 144 h12 a8 8 0 0 0 8 -8 v-12" />
+  </g>
+  <!-- QR estilizado -->
+  <g fill="#fbbf24">
+    <rect x="70" y="70" width="16" height="16" />
+    <rect x="94" y="70" width="10" height="10" />
+    <rect x="114" y="70" width="16" height="16" />
+    <rect x="70" y="94" width="10" height="10" />
+    <rect x="114" y="94" width="10" height="10" />
+    <rect x="70" y="114" width="16" height="16" />
+    <rect x="94" y="118" width="10" height="10" />
+    <rect x="114" y="114" width="16" height="16" />
+  </g>
+</svg>
