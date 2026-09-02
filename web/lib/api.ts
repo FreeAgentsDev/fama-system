@@ -88,6 +88,39 @@ export async function getEventById(id: string): Promise<PublicEvent> {
   return result.data;
 }
 
+/** Usado por `/[slug]` — la página pública que Daniel comparte en Instagram/WhatsApp. */
+export async function getEventBySlug(slug: string): Promise<PublicEvent> {
+  const result = await getFromIraca<PublicEvent>(
+    `/events/get-event-by-slug?slug=${encodeURIComponent(slug)}`,
+  );
+  const eventName = eventNameOf(result.meta.code);
+  if (eventName !== "GottenEventDomainEvent") {
+    throw new IracaRequestError(eventName, "No se encontró el evento.");
+  }
+  return result.data;
+}
+
+export interface PublicTicketView {
+  code: string;
+  attendeeName: string;
+  stage: string;
+  paymentStatus: "pending" | "approved" | "rejected";
+}
+
+/** Usado por `/[slug]/boleta/[ticketId]` — a donde redirige Wompi y apunta el link de WhatsApp. */
+export async function getTicketStatus(
+  ticketId: string,
+): Promise<{ event: PublicEvent; ticket: PublicTicketView }> {
+  const result = await getFromIraca<{ event: PublicEvent; ticket: PublicTicketView }>(
+    `/events/get-ticket-status?ticketId=${encodeURIComponent(ticketId)}`,
+  );
+  const eventName = eventNameOf(result.meta.code);
+  if (eventName !== "GottenTicketStatusDomainEvent") {
+    throw new IracaRequestError(eventName, "No se encontró la boleta.");
+  }
+  return result.data;
+}
+
 export interface ReserveTicketInput {
   eventId: string;
   attendeeName: string;
