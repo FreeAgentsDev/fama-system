@@ -115,3 +115,17 @@ export const CourtesyTicketIssuedDomainEvent = DomainEventKind<{
 export const EventPublishedDomainEvent = DomainEventKind<PublicEvent>(
   "EventPublishedDomainEvent",
 );
+
+/**
+ * Usado por `/[slug]/boleta/[ticketId]` (Fase 6) — vista pública mínima de una boleta propia,
+ * suficiente para mostrar el QR sin exponer más de lo que el comprador ya sabe (su nombre/etapa).
+ */
+export const GottenTicketStatusDomainEvent = DomainEventKind<{
+  event: PublicEvent;
+  ticket: {
+    code: string;
+    attendeeName: string;
+    stage: string;
+    paymentStatus: Ticket["paymentStatus"];
+  };
+}>("GottenTicketStatusDomainEvent");
