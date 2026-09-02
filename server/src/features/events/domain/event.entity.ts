@@ -509,6 +509,21 @@ export function voidTicket(event: Event, ticketId: string): VoidResult {
   return { ok: true, event: { ...withTicket, status: nextStatus }, ticket: updated };
 }
 
+/**
+ * Link de wa.me con el código de la boleta, para enviar tras confirmar el pago.
+ * Nota: wa.me solo soporta texto prellenado, no puede adjuntar la imagen del QR — por eso,
+ * si se pasa `boletaUrl` (página pública con el QR, Fase 6), se incluye como link en el mensaje.
+ */
+export function ticketWhatsAppLink(event: Event, ticket: Ticket, boletaUrl?: string): string {
+  const lines = [`Tu boleta para ${event.name} 🎉`, `Código: ${ticket.code}`];
+  lines.push(
+    boletaUrl
+      ? `Ábrela aquí para ver tu QR de entrada: ${boletaUrl}`
+      : "Muéstralo en la puerta el día del evento.",
+  );
+  return `https://wa.me/57${ticket.phone}?text=${encodeURIComponent(lines.join("\n"))}`;
+}
+
 export function findTicket(
   event: Event,
   code: string | number | null | undefined,

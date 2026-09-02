@@ -6,11 +6,16 @@ import { Event, PublicEvent, Ticket } from "../domain/event.entity";
 import {
   EventCreatedDomainEvent,
   EventSoldOutDomainEvent,
+  PaymentAlreadyProcessedDomainEvent,
+  PaymentConfirmationUnauthorizedDomainEvent,
   TicketNotFoundDomainEvent,
+  TicketPaymentConfirmedDomainEvent,
+  TicketPaymentRejectedDomainEvent,
   TicketReservedDomainEvent,
   TicketVoidedDomainEvent,
 } from "../domain/event.events";
 import { LiveFeedContract } from "../domain/live-feed.contract";
+import { ConfirmPaymentUsecaseImpl } from "./confirm-payment.usecase-impl";
 import { CreateEventUsecaseImpl } from "./create-event.usecase-impl";
 import { ReserveTicketUsecaseImpl } from "./reserve-ticket.usecase-impl";
 import { ScanTicketUsecaseImpl } from "./scan-ticket.usecase-impl";
@@ -77,6 +82,7 @@ function app() {
     create: new CreateEventUsecaseImpl(events, feed),
     reserve: new ReserveTicketUsecaseImpl(events, feed),
     scan: new ScanTicketUsecaseImpl(events, feed),
+    confirmPayment: new ConfirmPaymentUsecaseImpl(events, feed),
   };
 }
 
@@ -132,5 +138,97 @@ describe("Fama Boletería · usecases", () => {
     const { scan } = app();
     const missing = await scan.call({ code: "TQT-NOEXISTE" });
     expectEvent<{ code?: string }>(missing, TicketNotFoundDomainEvent);
+  });
+});
+
+describe("ConfirmPaymentUsecase · webhook de Wompi", () => {
+  const internalSecret = "test-secret";
+  const previousSecret = process.env.INTERNAL_WEBHOOK_SECRET;
+
+  async function withSecret<T>(run: () => Promise<T>): Promise<T> {
+    process.env.INTERNAL_WEBHOOK_SECRET = internalSecret;
+    try {
+      return await run();
+    } finally {
+      process.env.INTERNAL_WEBHOOK_SECRET = previousSecret;
+    }
+  }
+
+  it("rechaza la llamada si el internalSecret no coincide", async () => {
+    await withSecret(async () => {
+      const { reserve, confirmPayment, eventId } = await eventWithCupo(1);
+      const reserved = await reserve.call({ eventId, attendeeName: "Ana", phone: "3001234567" });
+      const { ticket } = expectEvent<{ ticket: Ticket }>(reserved, TicketReservedDomainEvent);
+
+      const result = await confirmPayment.call({
+        paymentReference: ticket.id,
+        wompiTransactionId: "wompi-tx-1",
+        status: "approved",
+        internalSecret: "secreto-incorrecto",
+      });
+      expectEvent(result, PaymentConfirmationUnauthorizedDomainEvent);
+    });
+  });
+
+  it("aprueba el pago, marca whatsappSent y arma el link de wa.me", async () => {
+    await withSecret(async () => {
+      const { reserve, confirmPayment, eventId } = await eventWithCupo(1);
+      const reserved = await reserve.call({ eventId, attendeeName: "Ana", phone: "3001234567" });
+      const { ticket } = expectEvent<{ ticket: Ticket }>(reserved, TicketReservedDomainEvent);
+
+      const result = await confirmPayment.call({
+        paymentReference: ticket.id,
+        wompiTransactionId: "wompi-tx-1",
+        status: "approved",
+        internalSecret,
+      });
+      const payload = expectEvent<{ ticket: Ticket; whatsappLink: string }>(
+        result,
+        TicketPaymentConfirmedDomainEvent,
+      );
+      assert.equal(payload.ticket.paymentStatus, "approved");
+      assert.equal(payload.ticket.whatsappSent, true);
+      assert.match(payload.whatsappLink, /^https:\/\/wa\.me\/573001234567\?text=/);
+    });
+  });
+
+  it("no aprueba dos veces el mismo pago", async () => {
+    await withSecret(async () => {
+      const { reserve, confirmPayment, eventId } = await eventWithCupo(1);
+      const reserved = await reserve.call({ eventId, attendeeName: "Ana", phone: "3001234567" });
+      const { ticket } = expectEvent<{ ticket: Ticket }>(reserved, TicketReservedDomainEvent);
+      await confirmPayment.call({
+        paymentReference: ticket.id,
+        wompiTransactionId: "wompi-tx-1",
+        status: "approved",
+        internalSecret,
+      });
+      const again = await confirmPayment.call({
+        paymentReference: ticket.id,
+        wompiTransactionId: "wompi-tx-1",
+        status: "approved",
+        internalSecret,
+      });
+      expectEvent(again, PaymentAlreadyProcessedDomainEvent);
+    });
+  });
+
+  it("un pago rechazado libera el cupo de la etapa para el siguiente comprador", async () => {
+    await withSecret(async () => {
+      const { reserve, confirmPayment, eventId } = await eventWithCupo(1);
+      const reserved = await reserve.call({ eventId, attendeeName: "Ana", phone: "3001234567" });
+      const { ticket } = expectEvent<{ ticket: Ticket }>(reserved, TicketReservedDomainEvent);
+
+      const rejected = await confirmPayment.call({
+        paymentReference: ticket.id,
+        wompiTransactionId: "wompi-tx-2",
+        status: "declined",
+        internalSecret,
+      });
+      expectEvent(rejected, TicketPaymentRejectedDomainEvent);
+
+      const retry = await reserve.call({ eventId, attendeeName: "Bruno", phone: "3004445566" });
+      expectEvent(retry, TicketReservedDomainEvent);
+    });
   });
 });

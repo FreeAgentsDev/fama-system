@@ -92,3 +92,8 @@ export const TicketPaymentRejectedDomainEvent = DomainEventKind<{
 export const PaymentAlreadyProcessedDomainEvent = DomainEventKind<{ ticketId: string }>(
   "PaymentAlreadyProcessedDomainEvent",
 );
+
+/** El `internalSecret` de ConfirmPaymentParam no coincide: alguien intenta llamar el endpoint sin pasar por el webhook de Wompi. */
+export const PaymentConfirmationUnauthorizedDomainEvent = DomainEventKind<{ reason: string }>(
+  "PaymentConfirmationUnauthorizedDomainEvent",
+);
