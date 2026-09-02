@@ -1,11 +1,14 @@
 import { Usecase } from "@scifamek-open-source/iraca/config";
 import { DomainEvent } from "@scifamek-open-source/iraca/domain";
-import { Event } from "../domain/event.entity";
+import { CreateEventStageInput, Event } from "../domain/event.entity";
 
 export interface CreateEventParam {
-  title: string;
-  startsAt: string | Date;
-  capacity: number;
+  name: string;
+  slug?: string;
+  date: string | Date;
+  venue?: string;
+  coverImageUrl?: string;
+  stages: CreateEventStageInput[];
 }
 
 export abstract class CreateEventUsecase extends Usecase<

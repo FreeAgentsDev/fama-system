@@ -2,6 +2,10 @@ export type EventStatus = "published" | "sold-out" | "cancelled";
 export type TicketStatus = "issued" | "checked-in" | "voided";
 export type Presence = "outside" | "inside";
 export type ScanResult = "admitted" | "exited" | "rejected-voided";
+export type PaymentStatus = "pending" | "approved" | "rejected";
+
+/** Comisión de Wompi que se absorbe en el precio público (no en lo que recibe Daniel). */
+export const WOMPI_FEE_RATE = 0.029;
 
 export interface GateScan {
   at: string;
@@ -9,40 +13,68 @@ export interface GateScan {
   result: ScanResult;
 }
 
+/** Etapa de precio de un evento (Preventa, Segunda, Puerta, ...). */
+export interface PriceStage {
+  name: string;
+  /** Precio en COP que recibe Daniel, sin comisión de Wompi. */
+  price: number;
+  capacity: number;
+  soldCount: number;
+}
+
 export interface Ticket {
   id: string;
+  /** TQT-XXXXXXXX — también es el código QR que se escanea en la puerta. */
   code: string;
   attendeeName: string;
   phone: string;
   createdAt: string;
+  /** Nombre de la etapa vigente al momento de la compra. */
+  stage: string;
+  /** Lo que recibe Daniel (precio de la etapa). */
+  pricePaid: number;
+  /** Lo que pagó el comprador (incluye la comisión de Wompi). */
+  publicPrice: number;
+  /** Referencia enviada a Wompi como `reference` (= ticket.id). Se usa para conciliar el webhook. */
+  paymentRef?: string;
+  paymentStatus: PaymentStatus;
+  /** Si ya se envió el link de WhatsApp con el QR. */
+  whatsappSent: boolean;
   status: TicketStatus;
   presence: Presence;
   entryCount: number;
   scans: GateScan[];
-  smsCode: string;
-  smsSentAt: string;
-  smsCount: number;
   checkedInAt?: string;
   lastScanAt?: string;
 }
 
 export interface Event {
   id: string;
-  title: string;
-  startsAt: string;
-  capacity: number;
-  reservedCount: number;
+  name: string;
+  /** Slug para la URL pública, ej: "love-house-15-ago". */
+  slug: string;
+  /** Fecha y hora del evento, ISO 8601. */
+  date: string;
+  venue: string;
+  coverImageUrl?: string;
+  stages: PriceStage[];
   status: EventStatus;
   tickets: Ticket[];
 }
 
 export interface PublicEvent {
   id: string;
-  title: string;
-  startsAt: string;
-  capacity: number;
-  reservedCount: number;
+  name: string;
+  slug: string;
+  date: string;
+  venue: string;
+  coverImageUrl?: string;
   status: EventStatus;
+  currentStage: PriceStage | null;
+  /** Precio que paga el comprador en la etapa vigente (incluye comisión Wompi). */
+  publicPrice: number;
+  /** Cupo total restante en el evento (suma de todas las etapas). */
+  remaining: number;
   inside: number;
   outside: number;
   entries: number;
@@ -59,10 +91,32 @@ export interface BoxOfficeStats {
   scans: number;
   checkedIn: number;
   pendingEntry: number;
+  /** Suma de `pricePaid` de los tickets con pago aprobado. */
+  revenue: number;
+}
+
+export function totalCapacity(event: Event): number {
+  return event.stages.reduce((sum, stage) => sum + stage.capacity, 0);
+}
+
+export function totalSold(event: Event): number {
+  return event.stages.reduce((sum, stage) => sum + stage.soldCount, 0);
 }
 
 export function remainingSeats(event: Event): number {
-  return Math.max(0, event.capacity - event.reservedCount);
+  return Math.max(0, totalCapacity(event) - totalSold(event));
+}
+
+/** La primera etapa (en orden) que todavía tiene cupo disponible. */
+export function currentStage(event: Event): PriceStage | null {
+  return event.stages.find((stage) => stage.soldCount < stage.capacity) ?? null;
+}
+
+/** Precio que paga el comprador: el precio de Daniel absorbiendo la comisión de Wompi. */
+export function publicPrice(event: Event): number {
+  const stage = currentStage(event);
+  if (!stage) return 0;
+  return Math.ceil(stage.price / (1 - WOMPI_FEE_RATE));
 }
 
 export function occupancy(event: Event): {
@@ -82,11 +136,15 @@ export function toPublicEvent(event: Event): PublicEvent {
   const { inside, outside, entries } = occupancy(event);
   return {
     id: event.id,
-    title: event.title,
-    startsAt: event.startsAt,
-    capacity: event.capacity,
-    reservedCount: event.reservedCount,
+    name: event.name,
+    slug: event.slug,
+    date: event.date,
+    venue: event.venue,
+    coverImageUrl: event.coverImageUrl,
     status: event.status,
+    currentStage: currentStage(event),
+    publicPrice: publicPrice(event),
+    remaining: remainingSeats(event),
     inside,
     outside,
     entries,
@@ -97,8 +155,9 @@ export function boxOfficeStats(event: Event): BoxOfficeStats {
   const live = event.tickets.filter((ticket) => ticket.status !== "voided");
   const inside = live.filter((ticket) => ticket.presence === "inside").length;
   const neverEntered = live.filter((ticket) => ticket.entryCount === 0).length;
+  const approved = event.tickets.filter((ticket) => ticket.paymentStatus === "approved");
   return {
-    sold: event.reservedCount,
+    sold: totalSold(event),
     remaining: remainingSeats(event),
     inside,
     outside: live.filter((ticket) => ticket.presence === "outside").length,
@@ -108,6 +167,7 @@ export function boxOfficeStats(event: Event): BoxOfficeStats {
     scans: event.tickets.reduce((sum, ticket) => sum + ticket.scans.length, 0),
     checkedIn: inside,
     pendingEntry: neverEntered,
+    revenue: approved.reduce((sum, ticket) => sum + ticket.pricePaid, 0),
   };
 }
 
@@ -136,25 +196,68 @@ export function normalizePhone(raw: string | number | null | undefined): string 
   throw new Error("Usa un celular colombiano de 10 dígitos (3XX...).");
 }
 
-export function createEvent(input: {
-  title: string;
-  startsAt: string | Date;
+export function slugify(raw: string): string {
+  const slug = raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!slug) {
+    throw new Error("No se pudo generar un slug válido.");
+  }
+  return slug;
+}
+
+export interface CreateEventStageInput {
+  name: string;
+  price: number;
   capacity: number;
+}
+
+export function createEvent(input: {
+  name: string;
+  slug?: string;
+  date: string | Date;
+  venue?: string;
+  coverImageUrl?: string;
+  stages: CreateEventStageInput[];
 }): Event {
-  const capacity = Number(input.capacity);
-  if (!input.title?.trim()) {
-    throw new Error("El título es obligatorio.");
+  if (!input.name?.trim()) {
+    throw new Error("El nombre del evento es obligatorio.");
   }
-  if (!Number.isFinite(capacity) || capacity < 1) {
-    throw new Error("El cupo debe ser un entero mayor a 0.");
+  if (!Array.isArray(input.stages) || input.stages.length === 0) {
+    throw new Error("El evento necesita al menos una etapa de precio.");
   }
+
+  const stages: PriceStage[] = input.stages.map((stage) => {
+    const price = Number(stage.price);
+    const capacity = Number(stage.capacity);
+    if (!stage.name?.trim()) {
+      throw new Error("Cada etapa necesita un nombre.");
+    }
+    if (!Number.isFinite(price) || price < 0) {
+      throw new Error(`El precio de la etapa "${stage.name}" no es válido.`);
+    }
+    if (!Number.isFinite(capacity) || capacity < 1) {
+      throw new Error(`El cupo de la etapa "${stage.name}" debe ser mayor a 0.`);
+    }
+    return {
+      name: stage.name.trim(),
+      price: Math.round(price),
+      capacity: Math.floor(capacity),
+      soldCount: 0,
+    };
+  });
 
   return {
     id: crypto.randomUUID(),
-    title: input.title.trim(),
-    startsAt: toIso(input.startsAt),
-    capacity: Math.floor(capacity),
-    reservedCount: 0,
+    name: input.name.trim(),
+    slug: slugify(input.slug?.trim() || input.name),
+    date: toIso(input.date),
+    venue: input.venue?.trim() || "Fama MZL",
+    coverImageUrl: input.coverImageUrl?.trim() || undefined,
+    stages,
     status: "published",
     tickets: [],
   };
@@ -177,35 +280,97 @@ export function issueTicket(
   if (event.status === "cancelled") {
     return { ok: false, reason: "cancelled" };
   }
-  if (event.status === "sold-out" || remainingSeats(event) <= 0) {
+
+  const stage = currentStage(event);
+  if (!stage) {
     return { ok: false, reason: "sold-out" };
   }
 
   const now = new Date().toISOString();
+  const ticketId = crypto.randomUUID();
   const ticket: Ticket = {
-    id: crypto.randomUUID(),
+    id: ticketId,
     code: makeTicketCode(),
     attendeeName: name,
     phone: normalizedPhone,
     createdAt: now,
+    stage: stage.name,
+    pricePaid: stage.price,
+    publicPrice: publicPrice(event),
+    paymentRef: ticketId,
+    paymentStatus: "pending",
+    whatsappSent: false,
     status: "issued",
     presence: "outside",
     entryCount: 0,
     scans: [],
-    smsCode: makeSmsCode(),
-    smsSentAt: now,
-    smsCount: 1,
   };
 
-  const reservedCount = event.reservedCount + 1;
+  const nextStages = event.stages.map((item) =>
+    item.name === stage.name ? { ...item, soldCount: item.soldCount + 1 } : item,
+  );
   const next: Event = {
     ...event,
-    reservedCount,
-    status: reservedCount >= event.capacity ? "sold-out" : "published",
+    stages: nextStages,
     tickets: [...event.tickets, ticket],
   };
+  next.status = remainingSeats(next) <= 0 ? "sold-out" : next.status;
 
   return { ok: true, event: next, ticket };
+}
+
+export type ConfirmPaymentResult =
+  | { ok: true; event: Event; ticket: Ticket }
+  | { ok: false; reason: "not-found" | "already-processed" };
+
+/** Se llama desde el webhook de Wompi cuando la transacción queda APPROVED. */
+export function confirmPayment(
+  event: Event,
+  ticketId: string,
+  wompiTransactionId?: string,
+): ConfirmPaymentResult {
+  const ticket = event.tickets.find((item) => item.id === ticketId);
+  if (!ticket) {
+    return { ok: false, reason: "not-found" };
+  }
+  if (ticket.paymentStatus !== "pending") {
+    return { ok: false, reason: "already-processed" };
+  }
+  const updated: Ticket = {
+    ...ticket,
+    paymentStatus: "approved",
+    paymentRef: wompiTransactionId ?? ticket.paymentRef,
+  };
+  return { ok: true, event: replaceTicket(event, updated), ticket: updated };
+}
+
+export type RejectPaymentResult =
+  | { ok: true; event: Event; ticket: Ticket }
+  | { ok: false; reason: "not-found" | "already-processed" };
+
+/** Se llama cuando Wompi reporta la transacción como DECLINED/ERROR: libera el cupo de la etapa. */
+export function rejectPayment(event: Event, ticketId: string): RejectPaymentResult {
+  const ticket = event.tickets.find((item) => item.id === ticketId);
+  if (!ticket) {
+    return { ok: false, reason: "not-found" };
+  }
+  if (ticket.paymentStatus !== "pending") {
+    return { ok: false, reason: "already-processed" };
+  }
+
+  const updated: Ticket = { ...ticket, paymentStatus: "rejected", status: "voided" };
+  const nextStages = event.stages.map((item) =>
+    item.name === ticket.stage ? { ...item, soldCount: Math.max(0, item.soldCount - 1) } : item,
+  );
+  const withTicket = replaceTicket({ ...event, stages: nextStages }, updated);
+  const nextStatus: EventStatus =
+    event.status === "cancelled"
+      ? "cancelled"
+      : remainingSeats(withTicket) > 0
+        ? "published"
+        : "sold-out";
+
+  return { ok: true, event: { ...withTicket, status: nextStatus }, ticket: updated };
 }
 
 export type ScanTicketResult =
@@ -218,7 +383,7 @@ export type ScanTicketResult =
     }
   | {
       ok: false;
-      reason: "not-found" | "voided";
+      reason: "not-found" | "voided" | "not-approved";
       event?: Event;
       ticket?: Ticket;
       scan?: GateScan;
@@ -247,6 +412,22 @@ export function scanTicket(
     return {
       ok: false,
       reason: "voided",
+      event: replaceTicket(event, updated),
+      ticket: updated,
+      scan,
+    };
+  }
+
+  if (ticket.paymentStatus !== "approved") {
+    const scan: GateScan = { at, gate, result: "rejected-voided" };
+    const updated: Ticket = {
+      ...ticket,
+      lastScanAt: at,
+      scans: [...ticket.scans, scan],
+    };
+    return {
+      ok: false,
+      reason: "not-approved",
       event: replaceTicket(event, updated),
       ticket: updated,
       scan,
@@ -314,47 +495,26 @@ export function voidTicket(event: Event, ticketId: string): VoidResult {
   }
 
   const updated: Ticket = { ...ticket, status: "voided" };
-  const reservedCount = Math.max(0, event.reservedCount - 1);
-  const next: Event = {
-    ...replaceTicket(event, updated),
-    reservedCount,
-    status:
-      event.status === "cancelled"
-        ? "cancelled"
-        : reservedCount >= event.capacity
-          ? "sold-out"
-          : "published",
-  };
-  return { ok: true, event: next, ticket: updated };
-}
+  const nextStages = event.stages.map((item) =>
+    item.name === ticket.stage ? { ...item, soldCount: Math.max(0, item.soldCount - 1) } : item,
+  );
+  const withTicket = replaceTicket({ ...event, stages: nextStages }, updated);
+  const nextStatus: EventStatus =
+    event.status === "cancelled"
+      ? "cancelled"
+      : remainingSeats(withTicket) > 0
+        ? "published"
+        : "sold-out";
 
-export function refreshTicketSms(event: Event, ticketId: string): Event | null {
-  const ticket = event.tickets.find((item) => item.id === ticketId);
-  if (!ticket || ticket.status === "voided") {
-    return null;
-  }
-  const updated: Ticket = {
-    ...ticket,
-    smsCode: makeSmsCode(),
-    smsSentAt: new Date().toISOString(),
-    smsCount: ticket.smsCount + 1,
-  };
-  return replaceTicket(event, updated);
-}
-
-export function ticketSmsBody(event: Event, ticket: Ticket): string {
-  return `Tiquetera: tu código de entrada a "${event.title}" es ${ticket.smsCode}. QR: ${ticket.code}`;
+  return { ok: true, event: { ...withTicket, status: nextStatus }, ticket: updated };
 }
 
 export function findTicket(
   event: Event,
   code: string | number | null | undefined,
 ): Ticket | undefined {
-  const raw = String(code ?? "").trim();
-  const upper = raw.toUpperCase();
-  return event.tickets.find(
-    (ticket) => ticket.code === upper || ticket.smsCode === raw,
-  );
+  const upper = String(code ?? "").trim().toUpperCase();
+  return event.tickets.find((ticket) => ticket.code === upper);
 }
 
 function replaceTicket(event: Event, ticket: Ticket): Event {
@@ -371,10 +531,6 @@ function makeTicketCode(): string {
     body += alphabet[Math.floor(Math.random() * alphabet.length)];
   }
   return `TQT-${body}`;
-}
-
-function makeSmsCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
 }
 
 function toIso(value: string | Date): string {

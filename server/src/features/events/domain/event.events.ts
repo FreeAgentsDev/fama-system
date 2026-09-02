@@ -6,7 +6,6 @@ import {
   PublicEvent,
   Ticket,
 } from "./event.entity";
-import { SmsMessage } from "./sms.contract";
 
 export const EventCreatedDomainEvent = DomainEventKind<PublicEvent>(
   "EventCreatedDomainEvent",
@@ -68,11 +67,6 @@ export const TicketCannotBeVoidedDomainEvent = DomainEventKind<{ ticketId: strin
   "TicketCannotBeVoidedDomainEvent",
 );
 
-export const SmsSentDomainEvent = DomainEventKind<{
-  ticket: Ticket;
-  sms: SmsMessage;
-}>("SmsSentDomainEvent");
-
 export const GottenBoxOfficeDomainEvent = DomainEventKind<{
   event: Event;
   stats: BoxOfficeStats;
@@ -81,6 +75,20 @@ export const GottenBoxOfficeDomainEvent = DomainEventKind<{
   >;
 }>("GottenBoxOfficeDomainEvent");
 
-export const GottenSmsOutboxDomainEvent = DomainEventKind<SmsMessage[]>(
-  "GottenSmsOutboxDomainEvent",
+/** Emitido por ConfirmPaymentUsecase (Fase 3) cuando Wompi confirma el pago. */
+export const TicketPaymentConfirmedDomainEvent = DomainEventKind<{
+  event: PublicEvent;
+  ticket: Ticket;
+  whatsappLink: string;
+}>("TicketPaymentConfirmedDomainEvent");
+
+/** Emitido cuando Wompi reporta la transacción como rechazada/fallida. */
+export const TicketPaymentRejectedDomainEvent = DomainEventKind<{
+  event: PublicEvent;
+  ticket: Ticket;
+}>("TicketPaymentRejectedDomainEvent");
+
+/** El webhook de Wompi puede reintentar entregas; este evento evita procesar dos veces. */
+export const PaymentAlreadyProcessedDomainEvent = DomainEventKind<{ ticketId: string }>(
+  "PaymentAlreadyProcessedDomainEvent",
 );

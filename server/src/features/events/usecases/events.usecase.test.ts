@@ -1,24 +1,16 @@
 import { DomainEvent } from "@scifamek-open-source/iraca/domain";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  assertDomainEvent,
-  assertHttpEvent,
-  callUsecase,
-  payloadOf,
-} from "../../../iraca-testing";
 import { EventContract } from "../domain/event.contract";
 import { Event, PublicEvent, Ticket } from "../domain/event.entity";
 import {
   EventCreatedDomainEvent,
   EventSoldOutDomainEvent,
-  TicketAdmittedDomainEvent,
-  TicketExitedDomainEvent,
   TicketNotFoundDomainEvent,
   TicketReservedDomainEvent,
+  TicketVoidedDomainEvent,
 } from "../domain/event.events";
 import { LiveFeedContract } from "../domain/live-feed.contract";
-import { SmsContract, SmsMessage } from "../domain/sms.contract";
 import { CreateEventUsecaseImpl } from "./create-event.usecase-impl";
 import { ReserveTicketUsecaseImpl } from "./reserve-ticket.usecase-impl";
 import { ScanTicketUsecaseImpl } from "./scan-ticket.usecase-impl";
@@ -35,6 +27,10 @@ class MemoryEvents extends EventContract {
     return this.store.get(id) ?? null;
   }
 
+  async getBySlug(slug: string): Promise<Event | null> {
+    return [...this.store.values()].find((event) => event.slug === slug) ?? null;
+  }
+
   async listPublished(): Promise<Event[]> {
     return [...this.store.values()];
   }
@@ -49,17 +45,15 @@ class MemoryEvents extends EventContract {
     }
     return null;
   }
-}
 
-class QuietSms extends SmsContract {
-  async send(
-    message: Omit<SmsMessage, "id" | "sentAt">,
-  ): Promise<SmsMessage> {
-    return { ...message, id: "sms-test", sentAt: new Date().toISOString() };
-  }
-
-  async list(): Promise<SmsMessage[]> {
-    return [];
+  async findByTicketId(ticketId: string) {
+    for (const event of this.store.values()) {
+      const ticket = event.tickets.find((item) => item.id === ticketId);
+      if (ticket) {
+        return { event, ticket };
+      }
+    }
+    return null;
   }
 }
 
@@ -67,89 +61,76 @@ class QuietFeed extends LiveFeedContract {
   async publish(_event: DomainEvent): Promise<void> {}
 }
 
+/** Asegura que `result` sea el DomainEvent esperado y devuelve su payload tipado. */
+function expectEvent<T>(result: DomainEvent, kind: { eventName: string }): T {
+  assert.ok(
+    result.is(kind as Parameters<DomainEvent["is"]>[0]),
+    `Se esperaba ${kind.eventName}, se obtuvo ${result.eventName}`,
+  );
+  return result.payload as T;
+}
+
 function app() {
   const events = new MemoryEvents();
-  const sms = new QuietSms();
   const feed = new QuietFeed();
   return {
     create: new CreateEventUsecaseImpl(events, feed),
-    reserve: new ReserveTicketUsecaseImpl(events, sms, feed),
+    reserve: new ReserveTicketUsecaseImpl(events, feed),
     scan: new ScanTicketUsecaseImpl(events, feed),
   };
 }
 
 async function eventWithCupo(capacity = 1) {
   const usecases = app();
-  const created = await callUsecase(usecases.create, {
-    title: "Charla Iraca",
-    startsAt: "2026-09-10T20:00:00.000Z",
-    capacity,
+  const created = await usecases.create.call({
+    name: "Love House Session",
+    date: "2026-09-10T20:00:00.000Z",
+    stages: [{ name: "Preventa", price: 20000, capacity }],
   });
-  assertDomainEvent(created, EventCreatedDomainEvent);
-  return {
-    ...usecases,
-    eventId: payloadOf<PublicEvent>(created, EventCreatedDomainEvent).id,
-  };
+  const publicEvent = expectEvent<PublicEvent>(created, EventCreatedDomainEvent);
+  return { ...usecases, eventId: publicEvent.id };
 }
 
-describe("Tiquetera con iraca-testing", () => {
-  it("reservar emite TicketReservedDomainEvent", async () => {
+describe("Fama Boletería · usecases", () => {
+  it("reservar emite TicketReservedDomainEvent con la boleta pending", async () => {
     const { reserve, eventId } = await eventWithCupo(1);
-    const reserved = await callUsecase(reserve, {
+    const reserved = await reserve.call({
       eventId,
       attendeeName: "Ana Restrepo",
       phone: "3001234567",
     });
-    assertDomainEvent(reserved, TicketReservedDomainEvent);
-    const ticket = payloadOf<{ ticket: Ticket }>(
-      reserved,
-      TicketReservedDomainEvent,
-    ).ticket;
-    assert.match(ticket.code, /^TQT-/);
-
-    assertHttpEvent(
-      { meta: { code: `Events:${reserved.eventName}` }, data: reserved.payload },
-      TicketReservedDomainEvent,
-    );
+    const payload = expectEvent<{ ticket: Ticket }>(reserved, TicketReservedDomainEvent);
+    assert.match(payload.ticket.code, /^TQT-/);
+    assert.equal(payload.ticket.paymentStatus, "pending");
   });
 
-  it("sin cupo emite EventSoldOutDomainEvent (sigue siendo 200 en HTTP)", async () => {
+  it("sin cupo emite EventSoldOutDomainEvent", async () => {
     const { reserve, eventId } = await eventWithCupo(1);
-    await callUsecase(reserve, {
-      eventId,
-      attendeeName: "Ana",
-      phone: "3001112233",
-    });
-    const soldOut = await callUsecase(reserve, {
+    await reserve.call({ eventId, attendeeName: "Ana", phone: "3001112233" });
+    const soldOut = await reserve.call({
       eventId,
       attendeeName: "Bruno",
       phone: "3004445566",
     });
-    assertDomainEvent(soldOut, EventSoldOutDomainEvent);
+    expectEvent<PublicEvent>(soldOut, EventSoldOutDomainEvent);
   });
 
-  it("el scan alterna TicketAdmitted y TicketExited", async () => {
+  it("no se puede escanear un ticket sin pago aprobado", async () => {
     const { reserve, scan, eventId } = await eventWithCupo(1);
-    const reserved = await callUsecase(reserve, {
+    const reserved = await reserve.call({
       eventId,
       attendeeName: "Ana",
       phone: "3001234567",
     });
-    const code = payloadOf<{ ticket: Ticket }>(
-      reserved,
-      TicketReservedDomainEvent,
-    ).ticket.code;
-
-    const inGate = await callUsecase(scan, { code, gate: "Norte" });
-    assertDomainEvent(inGate, TicketAdmittedDomainEvent);
-
-    const outGate = await callUsecase(scan, { code, gate: "Norte" });
-    assertDomainEvent(outGate, TicketExitedDomainEvent);
+    const { ticket } = expectEvent<{ ticket: Ticket }>(reserved, TicketReservedDomainEvent);
+    const scanResult = await scan.call({ code: ticket.code });
+    // El dominio trata "pago no aprobado" igual que una boleta anulada de cara al portero.
+    expectEvent(scanResult, TicketVoidedDomainEvent);
   });
 
   it("código inexistente emite TicketNotFoundDomainEvent", async () => {
     const { scan } = app();
-    const missing = await callUsecase(scan, { code: "TQT-NOEXISTE" });
-    assertDomainEvent(missing, TicketNotFoundDomainEvent);
+    const missing = await scan.call({ code: "TQT-NOEXISTE" });
+    expectEvent<{ code?: string }>(missing, TicketNotFoundDomainEvent);
   });
 });

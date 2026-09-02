@@ -14,7 +14,11 @@ export async function persistScan(
   code?: string,
 ): Promise<DomainEvent> {
   if (!result.ok) {
-    if (result.reason === "voided" && result.event && result.ticket) {
+    if (
+      (result.reason === "voided" || result.reason === "not-approved") &&
+      result.event &&
+      result.ticket
+    ) {
       const saved = await eventContract.save(result.event);
       const ticket = saved.tickets.find((item) => item.id === result.ticket!.id)!;
       return TicketVoidedDomainEvent({

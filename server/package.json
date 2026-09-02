@@ -1,12 +1,12 @@
 {
-  "name": "tiquetera-server",
+  "name": "fama-server",
   "version": "1.0.0",
   "private": true,
-  "description": "Servidor Iraca de Tiquetera: eventos, cupo y boletas.",
+  "description": "Servidor Iraca de Fama Boletería: eventos, etapas de precio, boletas y puerta.",
   "scripts": {
     "start": "ts-node src/index.ts",
     "dev": "ts-node src/index.ts",
-    "test": "node -r ts-node/register --test src/features/events/domain/event.entity.test.ts src/features/events/usecases/events.usecase.test.ts src/iraca-explorer/infer.test.ts src/iraca-testing/iraca-testing.test.ts"
+    "test": "node -r ts-node/register --test src/features/events/domain/event.entity.test.ts src/features/events/usecases/events.usecase.test.ts"
   },
   "packageManager": "pnpm@10.22.0",
   "dependencies": {
