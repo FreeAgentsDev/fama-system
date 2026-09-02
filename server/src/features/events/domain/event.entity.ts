@@ -80,6 +80,21 @@ export interface PublicEvent {
   entries: number;
 }
 
+/** Fila de la tabla `/admin/eventos` — un resumen liviano por evento, no manda los tickets. */
+export interface AdminEventSummary {
+  id: string;
+  name: string;
+  slug: string;
+  date: string;
+  venue: string;
+  status: EventStatus;
+  currentStageName: string | null;
+  sold: number;
+  capacity: number;
+  /** Suma de `pricePaid` de los tickets con pago aprobado (lo que recibe Daniel). */
+  revenue: number;
+}
+
 export interface BoxOfficeStats {
   sold: number;
   remaining: number;
@@ -148,6 +163,22 @@ export function toPublicEvent(event: Event): PublicEvent {
     inside,
     outside,
     entries,
+  };
+}
+
+export function toAdminEventSummary(event: Event): AdminEventSummary {
+  const approved = event.tickets.filter((ticket) => ticket.paymentStatus === "approved");
+  return {
+    id: event.id,
+    name: event.name,
+    slug: event.slug,
+    date: event.date,
+    venue: event.venue,
+    status: event.status,
+    currentStageName: currentStage(event)?.name ?? null,
+    sold: totalSold(event),
+    capacity: totalCapacity(event),
+    revenue: approved.reduce((sum, ticket) => sum + ticket.pricePaid, 0),
   };
 }
 
@@ -317,6 +348,72 @@ export function issueTicket(
   next.status = remainingSeats(next) <= 0 ? "sold-out" : next.status;
 
   return { ok: true, event: next, ticket };
+}
+
+/**
+ * Boleta de cortesía creada directamente por el admin (DJ, staff, invitado) — no pasa por Wompi,
+ * queda `paymentStatus: 'approved'` de una vez para que el WhatsApp con el QR salga inmediato.
+ * Sigue consumiendo cupo de la etapa vigente, pero a precio 0 (Daniel no recibe nada por ella).
+ */
+export function issueCourtesyTicket(
+  event: Event,
+  attendeeName: string,
+  phone: string,
+): IssueTicketResult {
+  const name = attendeeName?.trim();
+  if (!name) {
+    throw new Error("El nombre del asistente es obligatorio.");
+  }
+  const normalizedPhone = normalizePhone(phone);
+  if (event.status === "cancelled") {
+    return { ok: false, reason: "cancelled" };
+  }
+
+  const stage = currentStage(event);
+  if (!stage) {
+    return { ok: false, reason: "sold-out" };
+  }
+
+  const now = new Date().toISOString();
+  const ticketId = crypto.randomUUID();
+  const ticket: Ticket = {
+    id: ticketId,
+    code: makeTicketCode(),
+    attendeeName: name,
+    phone: normalizedPhone,
+    createdAt: now,
+    stage: stage.name,
+    pricePaid: 0,
+    publicPrice: 0,
+    paymentStatus: "approved",
+    whatsappSent: false,
+    status: "issued",
+    presence: "outside",
+    entryCount: 0,
+    scans: [],
+  };
+
+  const nextStages = event.stages.map((item) =>
+    item.name === stage.name ? { ...item, soldCount: item.soldCount + 1 } : item,
+  );
+  const next: Event = {
+    ...event,
+    stages: nextStages,
+    tickets: [...event.tickets, ticket],
+  };
+  next.status = remainingSeats(next) <= 0 ? "sold-out" : next.status;
+
+  return { ok: true, event: next, ticket };
+}
+
+/** Quita el evento del listado público (`/admin` → "Ocultar"). No borra tickets ni cambia cupos. */
+export function hideEvent(event: Event): Event {
+  return { ...event, status: "cancelled" };
+}
+
+/** Reversa `hideEvent`: vuelve a calcular si el evento queda `published` o `sold-out` según el cupo. */
+export function publishEvent(event: Event): Event {
+  return { ...event, status: remainingSeats(event) > 0 ? "published" : "sold-out" };
 }
 
 export type ConfirmPaymentResult =
