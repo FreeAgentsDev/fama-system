@@ -24,8 +24,6 @@ declare global {
 interface WompiCheckoutButtonProps {
   eventId: string;
   eventSlug: string;
-  /** Precio que paga el comprador (ya incluye la comisión de Wompi), en COP. */
-  publicPriceCOP: number;
   disabled?: boolean;
 }
 
@@ -33,13 +31,13 @@ interface WompiCheckoutButtonProps {
  * Formulario + botón de compra de la página pública (Fase 6). Reserva la boleta en el server
  * de Iraca (queda `pending`) y abre el checkout embebido de Wompi con `reference = ticket.id`,
  * que es lo que el webhook usará para confirmar el pago.
+ *
+ * El monto que se cobra SIEMPRE es `ticket.publicPrice` de la respuesta de `reserveTicket`, no
+ * el precio que se veía en pantalla al cargar la página: si una etapa se agotó justo antes de
+ * que este comprador reservara, el precio pudo subir — cobrar el de pantalla desincronizaría el
+ * pago de Wompi con lo que el server realmente registró como `pricePaid`/`publicPrice`.
  */
-export function WompiCheckoutButton({
-  eventId,
-  eventSlug,
-  publicPriceCOP,
-  disabled,
-}: WompiCheckoutButtonProps) {
+export function WompiCheckoutButton({ eventId, eventSlug, disabled }: WompiCheckoutButtonProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
@@ -68,7 +66,7 @@ export function WompiCheckoutButton({
       const ticket = await reserveTicket({ eventId, attendeeName: name, phone });
       const checkout = new window.WidgetCheckout({
         currency: "COP",
-        amountInCents: publicPriceCOP * 100,
+        amountInCents: ticket.publicPrice * 100,
         reference: ticket.paymentRef ?? ticket.id,
         publicKey,
         redirectUrl: `${window.location.origin}/${eventSlug}/boleta/${ticket.id}`,
