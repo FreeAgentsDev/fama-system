@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "baseUrl": "./",
+    "rootDir": "./",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "noImplicitReturns": false,
+    "noUnusedLocals": false,
+    "outDir": "dist",
+    "sourceMap": false,
+    "strict": true,
+    "target": "es2017",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "declaration": true,
+    "isolatedModules": true
+  },
+  "compileOnSave": true,
+  "include": ["src", "src/index.ts"],
+  "exclude": []
+}
