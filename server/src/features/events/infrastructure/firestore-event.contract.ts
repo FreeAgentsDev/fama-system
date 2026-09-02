@@ -55,6 +55,11 @@ export class FirestoreEventContract extends EventContract {
       .sort((a, b) => a.date.localeCompare(b.date));
   }
 
+  async listAll(): Promise<Event[]> {
+    const events = await this.allEvents();
+    return events.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
   async findByTicketCode(code: string): Promise<{ event: Event; ticket: Ticket } | null> {
     const upper = String(code ?? "").trim().toUpperCase();
     return this.findTicket((ticket) => ticket.code === upper);

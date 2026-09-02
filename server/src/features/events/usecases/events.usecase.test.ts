@@ -37,6 +37,10 @@ class MemoryEvents extends EventContract {
   }
 
   async listPublished(): Promise<Event[]> {
+    return [...this.store.values()].filter((event) => event.status !== "cancelled");
+  }
+
+  async listAll(): Promise<Event[]> {
     return [...this.store.values()];
   }
 

@@ -6,7 +6,17 @@ export class EventsController extends IracaController {
       methodMapper: [
         {
           method: "post",
-          patterns: [/Create/, /Reserve/, /CheckIn/, /Scan/, /Void/, /Confirm/],
+          patterns: [
+            /Create/,
+            /Reserve/,
+            /CheckIn/,
+            /Scan/,
+            /Void/,
+            /Confirm/,
+            /Issue/,
+            /Hide/,
+            /Publish/,
+          ],
         },
         { method: "get", patterns: [/Get/, /List/] },
       ],
