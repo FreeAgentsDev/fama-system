@@ -27,16 +27,6 @@ interface WompiCheckoutButtonProps {
   disabled?: boolean;
 }
 
-/**
- * Formulario + botón de compra de la página pública (Fase 6). Reserva la boleta en el server
- * de Iraca (queda `pending`) y abre el checkout embebido de Wompi con `reference = ticket.id`,
- * que es lo que el webhook usará para confirmar el pago.
- *
- * El monto que se cobra SIEMPRE es `ticket.publicPrice` de la respuesta de `reserveTicket`, no
- * el precio que se veía en pantalla al cargar la página: si una etapa se agotó justo antes de
- * que este comprador reservara, el precio pudo subir — cobrar el de pantalla desincronizaría el
- * pago de Wompi con lo que el server realmente registró como `pricePaid`/`publicPrice`.
- */
 export function WompiCheckoutButton({ eventId, eventSlug, disabled }: WompiCheckoutButtonProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -86,27 +76,22 @@ export function WompiCheckoutButton({ eventId, eventSlug, disabled }: WompiCheck
   return (
     <div className="flex flex-col gap-3">
       <input
-        className="rounded border border-neutral-700 bg-neutral-900 px-4 py-3 text-white placeholder:text-neutral-500"
+        className="fama-input"
         placeholder="Nombre completo"
         value={name}
         onChange={(event) => setName(event.target.value)}
         disabled={disabled || loading}
       />
       <input
-        className="rounded border border-neutral-700 bg-neutral-900 px-4 py-3 text-white placeholder:text-neutral-500"
+        className="fama-input"
         placeholder="Número de WhatsApp"
         value={phone}
         onChange={(event) => setPhone(event.target.value)}
         disabled={disabled || loading}
       />
-      {error && <p className="text-sm text-red-400">{error}</p>}
-      <button
-        type="button"
-        onClick={handlePay}
-        disabled={disabled || loading}
-        className="rounded bg-amber-400 px-6 py-3 font-semibold text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {loading ? "Abriendo pago…" : "Apartar mi boleta →"}
+      {error && <p className="text-sm text-[#ff8a8a]">{error}</p>}
+      <button type="button" onClick={handlePay} disabled={disabled || loading} className="fama-btn mt-1">
+        {loading ? "Abriendo pago…" : "Apartar mi boleta"}
       </button>
     </div>
   );
