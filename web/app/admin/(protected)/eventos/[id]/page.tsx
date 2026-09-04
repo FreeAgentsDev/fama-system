@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eventNameOf, iracaGet } from "@/lib/iraca-server";
 import type { BoxOfficeSnapshot } from "@/lib/admin-types";
@@ -18,5 +19,14 @@ export default async function EventoDetallePage({
     notFound();
   }
 
-  return <EventDetail initialSnapshot={result.data} />;
+  return (
+    <div>
+      <Link href="/admin/eventos" className="text-sm text-white/45 hover:text-white">
+        ← Eventos
+      </Link>
+      <div className="mt-4">
+        <EventDetail initialSnapshot={result.data} />
+      </div>
+    </div>
+  );
 }

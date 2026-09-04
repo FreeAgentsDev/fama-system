@@ -22,6 +22,12 @@ const STATUS_LABEL: Record<AdminEventSummary["status"], string> = {
   cancelled: "Oculto",
 };
 
+const STATUS_CLASS: Record<AdminEventSummary["status"], string> = {
+  published: "bg-emerald-400/15 text-emerald-300",
+  "sold-out": "bg-[#e8b84a]/15 text-[#e8b84a]",
+  cancelled: "bg-white/8 text-white/45",
+};
+
 export function EventRow({ event }: { event: AdminEventSummary }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -41,45 +47,34 @@ export function EventRow({ event }: { event: AdminEventSummary }) {
   }
 
   return (
-    <tr className="border-b border-neutral-900">
-      <td className="py-3 pr-4">
-        <Link href={`/admin/eventos/${event.id}`} className="font-medium text-white hover:underline">
+    <tr>
+      <td>
+        <Link href={`/admin/eventos/${event.id}`} className="font-medium text-white hover:text-[#4db8ff]">
           {event.name}
         </Link>
-        <div className="text-xs text-neutral-500">{event.venue}</div>
+        <div className="text-xs text-white/40">{event.venue}</div>
       </td>
-      <td className="py-3 pr-4 text-neutral-300">{dateFormatter.format(new Date(event.date))}</td>
-      <td className="py-3 pr-4 text-neutral-300">{event.currentStageName ?? "—"}</td>
-      <td className="py-3 pr-4 text-neutral-300">
+      <td className="text-white/70">{dateFormatter.format(new Date(event.date))}</td>
+      <td className="text-white/70">{event.currentStageName ?? "—"}</td>
+      <td className="text-white/70">
         {event.sold}/{event.capacity}
       </td>
-      <td className="py-3 pr-4 text-neutral-300">{currency.format(event.revenue)}</td>
-      <td className="py-3 pr-4">
-        <span
-          className={`rounded px-2 py-1 text-xs font-medium ${
-            event.status === "published"
-              ? "bg-green-900 text-green-300"
-              : event.status === "sold-out"
-                ? "bg-amber-900 text-amber-300"
-                : "bg-neutral-800 text-neutral-400"
-          }`}
-        >
+      <td className="text-white/70">{currency.format(event.revenue)}</td>
+      <td>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_CLASS[event.status]}`}>
           {STATUS_LABEL[event.status]}
         </span>
       </td>
-      <td className="py-3 text-right">
+      <td className="text-right">
         <div className="flex justify-end gap-2">
-          <Link
-            href={`/admin/eventos/${event.id}`}
-            className="rounded border border-neutral-700 px-3 py-1 text-xs text-neutral-200 hover:bg-neutral-800"
-          >
-            Ver detalle
+          <Link href={`/admin/eventos/${event.id}`} className="fama-btn-ghost px-3 py-1 text-xs">
+            Detalle
           </Link>
           <button
             type="button"
             onClick={toggleVisibility}
             disabled={loading}
-            className="rounded border border-neutral-700 px-3 py-1 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+            className="fama-btn-ghost px-3 py-1 text-xs disabled:opacity-50"
           >
             {event.status === "cancelled" ? "Publicar" : "Ocultar"}
           </button>

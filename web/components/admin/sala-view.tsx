@@ -44,15 +44,23 @@ export function SalaView({ events }: { events: AdminEventSummary[] }) {
   const [eventId, setEventId] = useState(sorted[0]?.id ?? "");
 
   if (sorted.length === 0) {
-    return <p className="text-neutral-400">No hay eventos activos.</p>;
+    return (
+      <div className="fama-card px-6 py-16 text-center">
+        <p className="text-lg font-medium">No hay eventos activos.</p>
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col items-center gap-6 text-center">
+    <div className="flex flex-col items-center gap-8 text-center">
+      <div>
+        <p className="fama-kicker">En vivo</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Sala</h1>
+      </div>
       <select
         value={eventId}
         onChange={(event) => setEventId(event.target.value)}
-        className="w-full max-w-xs rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white"
+        className="fama-input max-w-xs text-center"
       >
         {sorted.map((event) => (
           <option key={event.id} value={event.id}>
@@ -61,7 +69,6 @@ export function SalaView({ events }: { events: AdminEventSummary[] }) {
         ))}
       </select>
 
-      {/* `key` fuerza a remontar (y así resetear snapshot/feed) cada vez que cambia el evento. */}
       <SalaLive key={eventId} eventId={eventId} />
     </div>
   );
@@ -105,18 +112,17 @@ function SalaLive({ eventId }: { eventId: string }) {
 
   return (
     <>
-      <div>
-        <div className="text-8xl font-black text-green-400">{snapshot?.stats.inside ?? "—"}</div>
-        <div className="mt-1 text-lg text-neutral-400">personas adentro</div>
+      <div className="fama-card px-10 py-10">
+        <div className="text-8xl font-semibold tracking-tight text-emerald-300 [text-shadow:0_0_40px_rgba(52,211,153,0.5)]">
+          {snapshot?.stats.inside ?? "—"}
+        </div>
+        <div className="mt-2 text-sm uppercase tracking-[0.22em] text-white/45">personas adentro</div>
       </div>
 
       <div className="w-full max-w-sm space-y-2 text-left">
-        {feed.length === 0 && <p className="text-center text-neutral-600">Esperando movimiento…</p>}
+        {feed.length === 0 && <p className="text-center text-white/35">Esperando movimiento…</p>}
         {feed.map((item) => (
-          <div
-            key={item.id}
-            className="rounded border border-neutral-800 bg-neutral-950 px-4 py-3 text-lg"
-          >
+          <div key={item.id} className="fama-card px-4 py-3 text-lg">
             {item.message}
           </div>
         ))}

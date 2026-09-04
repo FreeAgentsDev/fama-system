@@ -11,29 +11,34 @@ export default async function AdminEventosPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Eventos</h1>
-        <Link
-          href="/admin/eventos/nueva"
-          className="rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-black hover:bg-amber-300"
-        >
-          + Nueva fecha
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="fama-kicker">Panel</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight">Eventos</h1>
+        </div>
+        <Link href="/admin/eventos/nueva" className="fama-btn">
+          Nueva fecha
         </Link>
       </div>
 
       {events.length === 0 ? (
-        <p className="text-neutral-400">Todavía no has creado ningún evento.</p>
+        <div className="fama-card px-6 py-16 text-center">
+          <p className="text-lg font-medium">Todavía no has creado ningún evento.</p>
+          <Link href="/admin/eventos/nueva" className="fama-btn mt-6 inline-flex">
+            Crear la primera fecha
+          </Link>
+        </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-sm">
+        <div className="fama-card overflow-x-auto">
+          <table className="fama-table min-w-[760px]">
             <thead>
-              <tr className="border-b border-neutral-800 text-left text-neutral-400">
-                <th className="py-2 pr-4 font-medium">Nombre</th>
-                <th className="py-2 pr-4 font-medium">Fecha</th>
-                <th className="py-2 pr-4 font-medium">Etapa</th>
-                <th className="py-2 pr-4 font-medium">Vendidos/Cupo</th>
-                <th className="py-2 pr-4 font-medium">Recaudo</th>
-                <th className="py-2 pr-4 font-medium">Estado</th>
+              <tr>
+                <th>Nombre</th>
+                <th>Fecha</th>
+                <th>Etapa</th>
+                <th>Vendidos</th>
+                <th>Recaudo</th>
+                <th>Estado</th>
                 <th></th>
               </tr>
             </thead>

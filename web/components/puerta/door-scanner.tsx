@@ -20,13 +20,17 @@ function vibrateFor(outcome: ScanOutcome) {
 
 function resultView(outcome: ScanOutcome): { bg: string; title: string; subtitle?: string } {
   if (outcome.kind === "admitted") {
-    return { bg: "bg-green-600", title: `Bienvenido, ${outcome.attendeeName}`, subtitle: "ADENTRO" };
+    return {
+      bg: "bg-emerald-500",
+      title: `Bienvenido, ${outcome.attendeeName}`,
+      subtitle: "ADENTRO",
+    };
   }
   if (outcome.kind === "exited") {
     return {
-      bg: "bg-yellow-500",
+      bg: "bg-[#e8b84a]",
       title: outcome.attendeeName,
-      subtitle: "YA ESTABA ADENTRO, ahora AFUERA",
+      subtitle: "YA ESTABA ADENTRO · ahora AFUERA",
     };
   }
   return { bg: "bg-red-600", title: "Código inválido o anulado" };
@@ -110,24 +114,28 @@ export function DoorScanner() {
     <div className="relative h-screen w-screen overflow-hidden bg-black">
       <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
 
-      {/* Marco guía */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className="h-64 w-64 rounded-2xl border-4 border-amber-400/70" />
+        <div className="relative h-64 w-64">
+          <span className="absolute left-0 top-0 h-10 w-10 rounded-tl-2xl border-t-2 border-l-2 border-[#4db8ff] shadow-[0_0_18px_rgba(77,184,255,0.7)]" />
+          <span className="absolute right-0 top-0 h-10 w-10 rounded-tr-2xl border-t-2 border-r-2 border-[#4db8ff] shadow-[0_0_18px_rgba(77,184,255,0.7)]" />
+          <span className="absolute bottom-0 left-0 h-10 w-10 rounded-bl-2xl border-b-2 border-l-2 border-[#e8b84a] shadow-[0_0_18px_rgba(232,184,74,0.55)]" />
+          <span className="absolute bottom-0 right-0 h-10 w-10 rounded-br-2xl border-b-2 border-r-2 border-[#e8b84a] shadow-[0_0_18px_rgba(232,184,74,0.55)]" />
+        </div>
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/80 to-transparent p-4 text-center">
-        <p className="text-lg font-bold">Fama — Puerta</p>
-        <p className="text-sm text-neutral-300">Apunta al QR de la boleta</p>
+      <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/80 to-transparent p-6 text-center">
+        <p className="fama-logo text-4xl">Fama</p>
+        <p className="mt-2 text-xs uppercase tracking-[0.28em] text-white/55">Puerta · apunta al QR</p>
       </div>
 
       {cameraError && (
-        <div className="absolute inset-x-0 top-24 mx-4 rounded bg-red-900/90 p-3 text-center text-sm">
+        <div className="absolute inset-x-0 top-28 mx-4 rounded-2xl bg-red-900/90 p-3 text-center text-sm">
           {cameraError}
         </div>
       )}
 
       {view.kind === "busy" && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-[2px]">
           <p className="text-2xl font-semibold">Verificando…</p>
         </div>
       )}
@@ -136,17 +144,14 @@ export function DoorScanner() {
         (() => {
           const { bg, title, subtitle } = resultView(view.outcome);
           return (
-            <div className={`absolute inset-0 flex flex-col items-center justify-center gap-2 ${bg} px-6 text-center`}>
-              <p className="text-4xl">
-                {view.outcome.kind === "admitted" ? "✅" : view.outcome.kind === "exited" ? "🔄" : "❌"}
-              </p>
-              <p className="text-3xl font-black leading-tight">{title}</p>
-              {subtitle && <p className="text-xl font-bold tracking-wide">{subtitle}</p>}
+            <div className={`absolute inset-0 flex flex-col items-center justify-center gap-3 ${bg} px-6 text-center`}>
+              <p className="text-3xl font-semibold leading-tight text-black">{title}</p>
+              {subtitle && <p className="text-sm font-bold tracking-[0.22em] text-black/70">{subtitle}</p>}
             </div>
           );
         })()}
 
-      <div className="absolute inset-x-0 bottom-0 flex justify-center p-4">
+      <div className="absolute inset-x-0 bottom-0 flex justify-center p-5 pb-8">
         {showManual ? (
           <form onSubmit={handleManualSubmit} className="flex w-full max-w-xs gap-2">
             <input
@@ -154,9 +159,9 @@ export function DoorScanner() {
               value={manualCode}
               onChange={(event) => setManualCode(event.target.value)}
               placeholder="TQT-XXXXXXXX"
-              className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-center uppercase text-white"
+              className="fama-input flex-1 py-2.5 text-center uppercase"
             />
-            <button type="submit" className="rounded bg-amber-400 px-4 py-2 font-semibold text-black">
+            <button type="submit" className="fama-btn px-4 py-2.5">
               Ir
             </button>
           </form>
@@ -164,9 +169,9 @@ export function DoorScanner() {
           <button
             type="button"
             onClick={() => setShowManual(true)}
-            className="rounded-full bg-black/60 px-4 py-2 text-xs text-neutral-300"
+            className="rounded-full bg-black/55 px-4 py-2 text-xs uppercase tracking-[0.18em] text-white/70 backdrop-blur"
           >
-            Escribir código manualmente
+            Escribir código
           </button>
         )}
       </div>

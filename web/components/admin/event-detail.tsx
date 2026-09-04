@@ -55,15 +55,15 @@ function describe(name: string, payload: Record<string, unknown>): FeedItem | nu
 
 function estadoBadge(ticket: AdminTicket): { icon: string; label: string; className: string } {
   if (ticket.status === "voided") {
-    return { icon: "❌", label: "Anulada", className: "text-red-400" };
+    return { icon: "✕", label: "Anulada", className: "text-[#ff8a8a]" };
   }
   if (ticket.paymentStatus === "pending") {
-    return { icon: "🕓", label: "Pago pendiente", className: "text-neutral-400" };
+    return { icon: "·", label: "Pago pendiente", className: "text-white/40" };
   }
   if (ticket.presence === "inside") {
-    return { icon: "✅", label: "Adentro", className: "text-green-400" };
+    return { icon: "●", label: "Adentro", className: "text-emerald-300" };
   }
-  return { icon: "⭕", label: "Afuera", className: "text-neutral-300" };
+  return { icon: "○", label: "Afuera", className: "text-white/70" };
 }
 
 function toCsv(tickets: AdminTicket[]): string {
@@ -181,75 +181,57 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">{snapshot.event.name}</h1>
-        <p className="text-sm text-neutral-400">{snapshot.event.venue}</p>
-      </div>
+      <p className="fama-kicker">{snapshot.event.venue}</p>
+      <h1 className="mt-2 mb-8 text-3xl font-semibold tracking-tight">{snapshot.event.name}</h1>
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        {/* Panel izquierdo: compradores */}
         <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-semibold">Compradores ({tickets.length})</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Compradores ({tickets.length})</h2>
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setCourtesyOpen((prev) => !prev)}
-                className="rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800"
-              >
+              <button type="button" onClick={() => setCourtesyOpen((prev) => !prev)} className="fama-btn-ghost text-xs">
                 + Cortesía
               </button>
-              <button
-                type="button"
-                onClick={handleExportCsv}
-                className="rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800"
-              >
+              <button type="button" onClick={handleExportCsv} className="fama-btn-ghost text-xs">
                 Exportar CSV
               </button>
             </div>
           </div>
 
           {courtesyOpen && (
-            <form
-              onSubmit={handleCourtesySubmit}
-              className="mb-4 flex flex-wrap items-end gap-2 rounded border border-neutral-800 bg-neutral-950 p-3"
-            >
-              <div>
-                <label className="mb-1 block text-xs text-neutral-500">Nombre</label>
+            <form onSubmit={handleCourtesySubmit} className="fama-card mb-4 flex flex-wrap items-end gap-3 p-4">
+              <div className="min-w-[160px] flex-1">
+                <label className="mb-1 block text-xs text-white/40">Nombre</label>
                 <input
                   value={courtesyName}
                   onChange={(event) => setCourtesyName(event.target.value)}
-                  className="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white"
+                  className="fama-input py-2.5"
                 />
               </div>
-              <div>
-                <label className="mb-1 block text-xs text-neutral-500">WhatsApp</label>
+              <div className="min-w-[140px] flex-1">
+                <label className="mb-1 block text-xs text-white/40">WhatsApp</label>
                 <input
                   value={courtesyPhone}
                   onChange={(event) => setCourtesyPhone(event.target.value)}
-                  className="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white"
+                  className="fama-input py-2.5"
                 />
               </div>
-              <button
-                type="submit"
-                disabled={courtesyLoading}
-                className="rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-black disabled:opacity-50"
-              >
+              <button type="submit" disabled={courtesyLoading} className="fama-btn py-2.5 text-sm">
                 {courtesyLoading ? "Creando…" : "Crear cortesía"}
               </button>
-              {courtesyError && <p className="w-full text-xs text-red-400">{courtesyError}</p>}
+              {courtesyError && <p className="w-full text-xs text-[#ff8a8a]">{courtesyError}</p>}
             </form>
           )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
+          <div className="fama-card overflow-x-auto">
+            <table className="fama-table min-w-[640px]">
               <thead>
-                <tr className="border-b border-neutral-800 text-left text-neutral-400">
-                  <th className="py-2 pr-3 font-medium">Nombre</th>
-                  <th className="py-2 pr-3 font-medium">Teléfono</th>
-                  <th className="py-2 pr-3 font-medium">Etapa</th>
-                  <th className="py-2 pr-3 font-medium">Precio</th>
-                  <th className="py-2 pr-3 font-medium">Estado</th>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Teléfono</th>
+                  <th>Etapa</th>
+                  <th>Precio</th>
+                  <th>Estado</th>
                   <th></th>
                 </tr>
               </thead>
@@ -258,21 +240,21 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
                   const estado = estadoBadge(ticket);
                   const canVoid = ticket.status !== "voided" && ticket.entryCount === 0;
                   return (
-                    <tr key={ticket.id} className="border-b border-neutral-900">
-                      <td className="py-2 pr-3">{ticket.attendeeName}</td>
-                      <td className="py-2 pr-3 text-neutral-400">{ticket.phone}</td>
-                      <td className="py-2 pr-3 text-neutral-400">{ticket.stage}</td>
-                      <td className="py-2 pr-3 text-neutral-400">{currency.format(ticket.pricePaid)}</td>
-                      <td className={`py-2 pr-3 ${estado.className}`}>
+                    <tr key={ticket.id}>
+                      <td>{ticket.attendeeName}</td>
+                      <td className="text-white/50">{ticket.phone}</td>
+                      <td className="text-white/50">{ticket.stage}</td>
+                      <td className="text-white/50">{currency.format(ticket.pricePaid)}</td>
+                      <td className={estado.className}>
                         {estado.icon} {estado.label}
                       </td>
-                      <td className="py-2 text-right">
+                      <td className="text-right">
                         {canVoid && (
                           <button
                             type="button"
                             onClick={() => handleVoid(ticket.id)}
                             disabled={busyTicketId === ticket.id}
-                            className="text-xs text-red-400 hover:underline disabled:opacity-50"
+                            className="text-xs text-[#ff8a8a] hover:underline disabled:opacity-50"
                           >
                             Anular
                           </button>
@@ -283,7 +265,7 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
                 })}
                 {tickets.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-neutral-500">
+                    <td colSpan={6} className="py-10 text-center text-white/40">
                       Todavía no hay compradores.
                     </td>
                   </tr>
@@ -293,20 +275,21 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
           </div>
         </div>
 
-        {/* Panel derecho: sala en vivo */}
         <div className="space-y-4">
-          <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-4 text-center">
+          <div className="fama-card p-5 text-center">
             <div className="flex justify-around">
               <div>
-                <div className="text-4xl font-bold text-green-400">{snapshot.stats.inside}</div>
-                <div className="text-xs text-neutral-500">Adentro</div>
+                <div className="text-5xl font-semibold text-emerald-300 [text-shadow:0_0_24px_rgba(52,211,153,0.45)]">
+                  {snapshot.stats.inside}
+                </div>
+                <div className="mt-1 text-xs uppercase tracking-[0.18em] text-white/40">Adentro</div>
               </div>
               <div>
-                <div className="text-4xl font-bold text-neutral-300">{snapshot.stats.outside}</div>
-                <div className="text-xs text-neutral-500">Afuera</div>
+                <div className="text-5xl font-semibold text-white/80">{snapshot.stats.outside}</div>
+                <div className="mt-1 text-xs uppercase tracking-[0.18em] text-white/40">Afuera</div>
               </div>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-neutral-500">
+            <div className="mt-5 grid grid-cols-2 gap-2 text-xs text-white/45">
               <span>Vendidas: {snapshot.stats.sold}</span>
               <span>Recaudo: {currency.format(snapshot.stats.revenue)}</span>
               <span>Anuladas: {snapshot.stats.voided}</span>
@@ -314,26 +297,24 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
             </div>
           </div>
 
-          <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-            <h3 className="mb-2 text-sm font-semibold text-neutral-300">En vivo</h3>
-            <ul className="space-y-1.5 text-sm">
-              {feed.length === 0 && <li className="text-neutral-600">Esperando movimiento…</li>}
+          <div className="fama-card p-5">
+            <h3 className="fama-kicker mb-3">En vivo</h3>
+            <ul className="space-y-2 text-sm">
+              {feed.length === 0 && <li className="text-white/35">Esperando movimiento…</li>}
               {feed.map((item) => (
                 <li key={item.id} className="flex items-center justify-between gap-2">
                   <span
                     className={
                       item.tone === "good"
-                        ? "text-green-400"
+                        ? "text-emerald-300"
                         : item.tone === "bad"
-                          ? "text-red-400"
-                          : "text-neutral-300"
+                          ? "text-[#ff8a8a]"
+                          : "text-white/80"
                     }
                   >
                     {item.message}
                   </span>
-                  <span className="shrink-0 text-xs text-neutral-600">
-                    {timeFormatter.format(new Date(item.at))}
-                  </span>
+                  <span className="shrink-0 text-xs text-white/30">{timeFormatter.format(new Date(item.at))}</span>
                 </li>
               ))}
             </ul>
