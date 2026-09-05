@@ -6,19 +6,22 @@ export class EventsController extends IracaController {
       methodMapper: [
         {
           method: "post",
+          // Anclados al inicio (^) a propósito: sin el ancla, /Publish/ también hace match con
+          // ListPublishedEventsUsecase ("Published" contiene "Publish") y ese endpoint quedaría
+          // registrado como POST, devolviendo 404 al GET que hace el front.
           patterns: [
-            /Create/,
-            /Reserve/,
-            /CheckIn/,
-            /Scan/,
-            /Void/,
-            /Confirm/,
-            /Issue/,
-            /Hide/,
-            /Publish/,
+            /^Create/,
+            /^Reserve/,
+            /^CheckIn/,
+            /^Scan/,
+            /^Void/,
+            /^Confirm/,
+            /^Issue/,
+            /^Hide/,
+            /^Publish/,
           ],
         },
-        { method: "get", patterns: [/Get/, /List/] },
+        { method: "get", patterns: [/^Get/, /^List/] },
       ],
     });
   }
