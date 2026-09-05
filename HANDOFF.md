@@ -1,6 +1,6 @@
 # Fama System — estado del trabajo (handoff)
 
-Contexto para continuar el desarrollo. Última actualización: 5 sep 2026.
+Contexto para continuar el desarrollo. Última actualización: 4 sep 2026.
 
 ## Qué es esto
 
@@ -37,7 +37,7 @@ cd server && pnpm test                    # 30 tests
 - Sin credenciales de Firebase, el store es un **`Map` en memoria**: los datos se pierden en
   cada reinicio del server. Por eso hay que volver a correr `pnpm seed` después de reiniciar.
 
-## Trabajado en la sesión anterior (sin commitear, rama `master`)
+## Trabajado en la sesión anterior (ya commiteado en `master`)
 
 ### Bugs encontrados y arreglados
 
@@ -86,40 +86,78 @@ M server/src/index.ts                                        (loadEnv + attachIr
 ? web/public/eventos/                                        (3 flyers)
 ```
 
-Estado: `tsc --noEmit` limpio, **30/30 tests pasando**. Nada commiteado todavía.
+Estado: `tsc --noEmit` limpio, **30/30 tests pasando**. Commiteado en `b0c9f9c`, `e5bc07f` y `da80d8e`.
+
 
 ## Pendientes
 
-### Verificación interrumpida
-El barrido por roles quedó a medias. Falta recorrer y validar con datos del seed:
-- Cartelera pública `/` y página de evento `/[slug]` (¿se ven los flyers y las etapas?)
-- Flujo de compra completo y boleta con QR en `/[slug]/boleta/[ticketId]`
-- Scanner de puerta `/puerta` (PWA con `@zxing`)
-- Sala en vivo del admin (SSE vía `/stream`) y "Exportar CSV"
+### Verificación por roles — HECHA (4 sep)
 
-### Bugs sospechados, sin confirmar
-- **`listPublished()` en `firestore-event.contract.ts` solo filtra `status !== "cancelled"`**,
-  no filtra por oculto/publicado. Un evento "Ocultado" desde el admin probablemente **sigue
-  saliendo en la cartelera pública**. Verificar y arreglar. `EventStatus` es
-  `"published" | "sold-out" | "cancelled"` — no hay estado "hidden", revisar qué hace
-  `HideEventUsecase` realmente.
-- **`web/app/page.tsx` traga errores** con `catch { events = [] }`, mostrando "no hay fechas"
-  ante cualquier fallo de red. Fue lo que escondió el bug 1 — conviene diferenciar
-  "no hay eventos" de "no pude cargar".
-- `web/app/page.tsx` combina `export const revalidate = 30` con fetches `cache: "no-store"`,
-  lo cual es contradictorio en App Router. Revisar.
+Barrido completo con los datos del seed, server y web levantados. Todo lo de abajo
+se probó de verdad, no por lectura de código:
+
+| Superficie | Resultado |
+|---|---|
+| Cartelera `/` | ✅ 3 eventos, flyers, etapa y precio correctos |
+| Evento `/[slug]` | ✅ precio público, "Quedan 3 boletas a este precio" (20−17) |
+| Boleta `/[slug]/boleta/[id]` | ✅ QR PNG 320×320 renderiza, nombre, etapa y código |
+| Scanner `/puerta` | ✅ admite por código manual; backend pasó a `inside:1, entries:1` |
+| Sala en vivo `/admin/sala` | ✅ SSE en vivo: contador 1→2 y "Santiago Ramírez entró" sin recargar |
+| Admin `/admin/eventos` | ✅ PIN, listado, vendidos y recaudo correctos |
+| Detalle + CSV | ✅ CSV real capturado: 18 líneas, comillas escapadas, estado "Adentro" |
+| Ocultar / Publicar | ✅ round-trip completo |
+
+**Bug nuevo encontrado y arreglado (`9e0d99f`):** la cartelera y la descripción
+OpenGraph mostraban `currentStage.price` (lo que recibe Daniel) en vez de
+`publicPrice` (lo que paga el comprador). Se veía "Desde $15.000" en la cartelera y
+al compartir el link, y $15.448 al pagar. Ahora ambas usan `publicPrice`.
+
+### Bugs sospechados — resueltos
+
+- ~~`listPublished()` no filtra ocultos~~ → **falsa alarma.** `hideEvent()` pone
+  `status: "cancelled"`, y el filtro `status !== "cancelled"` es justo lo que lo
+  saca de la cartelera. Verificado: al ocultar, el evento desaparece de `/`, y
+  entrar directo a `/[slug]` muestra "Este evento ya no está disponible" sin botón
+  de compra. `EventStatus` no necesita un estado "hidden" nuevo.
+- ~~`page.tsx` traga errores~~ → **arreglado** (`9e0d99f`). Distingue cartelera
+  vacía de fallo de carga y loguea el error. Verificado levantando el web contra un
+  backend muerto: muestra "No pudimos cargar la cartelera".
+- ~~`revalidate` + `no-store`~~ → **arreglado** (`9e0d99f`). Confirmado en los docs
+  de Next 16 (`02-guides/caching-without-cache-components.md`): un fetch con
+  `no-store` fuerza render dinámico y el `revalidate` del segmento no lo pisa. Era
+  configuración muerta; se quitó de `page.tsx` y de `[slug]/page.tsx`.
+
+### Correcciones a este documento
+
+- El botón de Wompi **sí renderiza** sin `NEXT_PUBLIC_WOMPI_KEY`; falla al hacer
+  clic con "Falta configurar NEXT_PUBLIC_WOMPI_KEY". No bloquea la demo visual.
+- El script del widget (`checkout.wompi.co/widget.js`) **ya está** cargado en
+  `app/layout.tsx:36` y `window.WidgetCheckout` carga bien. Lo único que falta es
+  la llave.
 
 ### Faltantes para producción
-- **`NEXT_PUBLIC_WOMPI_KEY` no está en `web/.env.local`** — sin ella el botón de checkout
-  (`components/wompi-checkout-button.tsx`) no renderiza. Bloquea probar el pago end-to-end.
-- Wompi está en **sandbox**; falta pasar a llaves productivas (requiere aprobación de Daniel).
-- **Bold** aparece como método de pago en la propuesta pero **no está implementado** (solo Wompi).
+
+- **`NEXT_PUBLIC_WOMPI_KEY` (`pub_test_…`) en `web/.env.local`** — es lo único que
+  falta para probar el pago end-to-end. Todo lo demás del checkout está listo.
+- Wompi está en **sandbox**; falta pasar a llaves productivas (requiere aprobación
+  de Daniel).
+- **Bold** aparece en la propuesta pero **no está implementado** (solo Wompi).
   Confirmar con Daniel si entra en el alcance o se aclara que quedó fuera.
 - Credenciales de Firestore para que los datos persistan (`FIREBASE_PROJECT_ID`,
-  `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`).
+  `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`). Sin ellas hay que re-correr
+  `pnpm seed` en cada reinicio del server.
 - **No hay tests en `web/`**, solo en `server/`. El webhook de Wompi
-  (`app/api/wompi/webhook/route.ts`) es lo más crítico y lo que más duele si falla en producción.
+  (`app/api/wompi/webhook/route.ts`) es lo más crítico.
 - Desplegar: server a Railway, web a Vercel, con dominio para la demo.
+
+### Pulido menor (no bloquea la demo)
+
+- `/admin/sala` dice "1 PERSONAS ADENTRO" — falta singular.
+- El error de cámara en `/puerta` muestra el mensaje crudo del navegador en inglés
+  ("Permission denied") en una pantalla que si no está toda en español.
+- Los flyers son los originales de la propuesta y traen la fecha vieja impresa
+  ("13 de Agosto" en Precupido) mientras el texto dice 12 de septiembre. Daniel lo
+  va a notar en la demo.
 
 ## Cosas que ya están bien (no romper)
 
