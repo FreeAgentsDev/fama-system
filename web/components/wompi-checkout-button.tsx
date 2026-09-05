@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { IracaRequestError, reserveTicket } from "@/lib/api";
 import { checkoutRedirectOrigin } from "@/lib/checkout-origin";
@@ -44,6 +45,7 @@ export function WompiCheckoutButton({ eventId, eventSlug, disabled }: WompiCheck
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   async function handlePay() {
     setError(null);
@@ -77,7 +79,27 @@ export function WompiCheckoutButton({ eventId, eventSlug, disabled }: WompiCheck
         ...(ticket.wompiSignature ? { signature: { integrity: ticket.wompiSignature } } : {}),
       });
       checkout.open((result) => {
-        console.info("Wompi checkout:", result?.transaction?.id, result?.transaction?.status);
+        const transaction = result?.transaction;
+        console.info("Wompi checkout:", transaction?.id, transaction?.status);
+
+        // El widget **no redirige solo**. `redirectUrl` sólo entra en juego con los métodos
+        // que sacan al comprador del iframe (PSE, Nequi) y lo devuelven; cuando el pago se
+        // completa dentro del widget —una tarjeta, por ejemplo— esta función es el único
+        // aviso que recibimos, y la navegación a la boleta nos toca a nosotros.
+        //
+        // Antes esto sólo escribía en consola, así que el comprador pagaba, le daba "volver
+        // al comercio" y se quedaba mirando la misma página del evento, sin su QR.
+        if (!transaction) {
+          // Cerró el widget sin pagar: se queda donde está y puede reintentar.
+          return;
+        }
+
+        // Se navega con cualquier estado, no sólo APPROVED: la página de la boleta ya
+        // distingue pendiente, aprobado y rechazado, y muestra el mensaje que toca.
+        // Ruta relativa a propósito: `checkoutRedirectOrigin` existe para el WAF de Wompi,
+        // pero acá hay que quedarse en el origen que el comprador está navegando.
+        setLoading(true);
+        router.push(`/${eventSlug}/boleta/${ticket.id}`);
       });
     } catch (err) {
       setError(
