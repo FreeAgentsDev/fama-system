@@ -155,8 +155,10 @@ export async function scanTicket(code: string, gate?: string): Promise<ScanOutco
   }
 }
 
-export async function reserveTicket(input: ReserveTicketInput): Promise<ReservedTicket> {
-  const result = await postToIraca<{ event: PublicEvent; ticket: ReservedTicket }>(
+export async function reserveTicket(
+  input: ReserveTicketInput,
+): Promise<ReservedTicket & { wompiSignature?: string }> {
+  const result = await postToIraca<{ event: PublicEvent; ticket: ReservedTicket; wompiSignature?: string }>(
     "/events/reserve-ticket",
     input,
   );
@@ -168,5 +170,6 @@ export async function reserveTicket(input: ReserveTicketInput): Promise<Reserved
         : "No se pudo apartar la boleta. Intenta de nuevo.";
     throw new IracaRequestError(eventName, message);
   }
-  return result.data.ticket;
+  // La firma vive junto al ticket, no dentro — se computa aparte en `ReserveTicketUsecaseImpl`.
+  return { ...result.data.ticket, wompiSignature: result.data.wompiSignature };
 }

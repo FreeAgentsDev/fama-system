@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...menos la plantilla: es la única documentación de qué variables necesita web/ para
+# desplegar. Sin esta excepción, `.env*` se la tragaba y nunca llegó al repo.
+!.env.example
 
 # vercel
 .vercel

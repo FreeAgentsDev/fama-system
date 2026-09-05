@@ -2,9 +2,17 @@
 
 import { useState } from "react";
 import { IracaRequestError, reserveTicket } from "@/lib/api";
+import { checkoutRedirectOrigin } from "@/lib/checkout-origin";
+
+interface WompiWidgetTransactionResult {
+  transaction?: { id?: string; status?: string };
+}
 
 interface WompiWidgetInstance {
-  open: () => void;
+  /** El widget exige una función de respuesta — sin ella tira "Debes especificar una función
+   *  de respuesta" y nunca abre. La navegación real la hace `redirectUrl`; la confirmación
+   *  real llega por el webhook (`app/api/wompi/webhook/route.ts`), nunca por este callback. */
+  open: (onResult: (result: WompiWidgetTransactionResult) => void) => void;
 }
 
 interface WompiWidgetConfig {
@@ -13,6 +21,10 @@ interface WompiWidgetConfig {
   reference: string;
   publicKey: string;
   redirectUrl: string;
+  /** Firma de integridad (SHA256 de referencia+monto+moneda+secreto), calculada en el server —
+   *  ver `wompiIntegritySignature` en el dominio. Sin ella, algunas cuentas de Wompi rechazan
+   *  el pago directamente. */
+  signature?: { integrity: string };
 }
 
 declare global {
@@ -59,9 +71,14 @@ export function WompiCheckoutButton({ eventId, eventSlug, disabled }: WompiCheck
         amountInCents: ticket.publicPrice * 100,
         reference: ticket.paymentRef ?? ticket.id,
         publicKey,
-        redirectUrl: `${window.location.origin}/${eventSlug}/boleta/${ticket.id}`,
+        // Nunca `window.location.origin` a secas: con `localhost` el WAF de Wompi devuelve
+        // 403 y el widget se queda cargando para siempre. Ver `lib/checkout-origin.ts`.
+        redirectUrl: `${checkoutRedirectOrigin(window.location.origin)}/${eventSlug}/boleta/${ticket.id}`,
+        ...(ticket.wompiSignature ? { signature: { integrity: ticket.wompiSignature } } : {}),
       });
-      checkout.open();
+      checkout.open((result) => {
+        console.info("Wompi checkout:", result?.transaction?.id, result?.transaction?.status);
+      });
     } catch (err) {
       setError(
         err instanceof IracaRequestError
