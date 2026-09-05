@@ -201,6 +201,39 @@ dos noches.
 - Historial de movimientos por boleta, con hora y si vino de la puerta o del admin.
 - El CSV suma `entradas` y `ultimo_movimiento`.
 
+### Salas en vivo
+`/admin/salas` (antes `/admin/sala`, que mostraba una noche a la vez en un select).
+Todas las noches juntas, en vivo por SSE, y cada tarjeta se adapta a en qué va:
+
+| Fase | Qué muestra |
+|---|---|
+| En curso | adentro · salieron · sin llegar, barra de ocupación, último movimiento |
+| Próxima | vendidas, recaudo, etapa vigente, cupo restante |
+| Terminada | **% de asistencia**, cuántos asistieron, cuántos compraron y no llegaron |
+
+Una noche con gente adentro cuenta como "en curso" aunque el reloj diga otra cosa.
+Arriba va el total de personas adentro y cuántas salas están activas; abajo, el feed
+de movimientos de todas las noches con el evento al que pertenece cada uno.
+
+Para esto `AdminEventSummary` creció con la ocupación (`inside`, `outside`,
+`attended`, `neverEntered`, `entries`, `voided`, `remaining`, `lastScanAt`), así el
+panel se arma con una sola llamada a `list-events` en vez de pedir el box office de
+cada evento.
+
+**Ojo con `outside`:** en el dominio significa "no está adentro", así que incluye a
+quien compró y nunca llegó. Para asistencia hay que usar `attended` (entró al menos
+una vez); los que entraron y se fueron son `attended - inside`.
+
+### Dos trampas de Next 16 que ya están resueltas
+- **Fechas e hidratación.** `Intl.DateTimeFormat` con `timeStyle` mete U+00A0 antes
+  de "p. m." en Node y un espacio normal en el navegador — misma locale, misma zona,
+  distinta data ICU. En un componente cliente eso rompe la hidratación con dos
+  strings que se ven idénticos. `lib/format.ts` normaliza los espacios; úsalo para
+  cualquier fecha que se renderice en las dos pasadas.
+- **`Date.now()` en render.** La regla `react-hooks/purity` lo rechaza, y con razón.
+  El timestamp del server se lee en `lib/salas.ts` (capa de datos) con `connection()`
+  para diferirlo a request time; la página solo renderiza lo que recibe.
+
 ### Fuera de alcance, a propósito
 La **base de clientes cruzada entre eventos** ("quién vino, a qué noche") es tier 3
 en la propuesta ($1.500.000, no contratado) y **no se construyó**. Lo que sí está
