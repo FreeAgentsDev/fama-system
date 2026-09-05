@@ -148,6 +148,11 @@ al compartir el link, y $15.448 al pagar. Ahora ambas usan `publicPrice`.
   `pnpm seed` en cada reinicio del server.
 - **No hay tests en `web/`**, solo en `server/`. El webhook de Wompi
   (`app/api/wompi/webhook/route.ts`) es lo más crítico.
+- **`create-event` no valida que el slug sea único.** Se descubrió porque correr
+  `pnpm seed` dos veces duplicaba las 3 noches en la cartelera. El seed ya se
+  protege (`3c7b538`), pero el hueco sigue en el dominio: Daniel puede crear dos
+  eventos con el mismo slug desde el admin y `/[slug]` resolvería a cualquiera de
+  los dos. Falta un `EventSlugTakenDomainEvent` y su manejo en el form del admin.
 - Desplegar: server a Railway, web a Vercel, con dominio para la demo.
 
 ### Pulido menor (no bloquea la demo)
