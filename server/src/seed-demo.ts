@@ -100,11 +100,15 @@ function eventNameOf(body: unknown): string {
   return code.split(":").pop() ?? "sin-code";
 }
 
-async function call<T>(path: string, body: unknown): Promise<{ name: string; data: T }> {
+async function call<T>(
+  path: string,
+  body?: unknown,
+  method: "GET" | "POST" = "POST",
+): Promise<{ name: string; data: T }> {
   const response = await fetch(`${IRACA_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    method,
+    headers: method === "POST" ? { "Content-Type": "application/json" } : undefined,
+    body: method === "POST" ? JSON.stringify(body) : undefined,
   });
   const parsed = (await response.json()) as { data: T };
   return { name: eventNameOf(parsed), data: parsed.data };
@@ -144,8 +148,21 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // create-event no valida que el slug sea único, así que correr el seed dos veces contra
+  // el mismo server dejaba la cartelera con cada noche duplicada (y /[slug] resolviendo a
+  // cualquiera de las dos). Como el HANDOFF pide re-sembrar después de cada reinicio, es
+  // fácil correrlo de más justo antes de una demo. Saltamos lo que ya existe.
+  const existing = await call<Array<{ slug?: string }>>("/events/list-events", undefined, "GET");
+  const existingSlugs = new Set(
+    Array.isArray(existing.data) ? existing.data.map((event) => event.slug) : [],
+  );
+
   let buyerIndex = 0;
   for (const event of events) {
+    if (existingSlugs.has(event.slug)) {
+      console.log(`• ${event.name} → ya existe, no se toca (reinicia el server para empezar de cero)`);
+      continue;
+    }
     const created = await call<{ id?: string }>("/events/create-event", event);
     if (created.name !== "EventCreatedDomainEvent" || !created.data?.id) {
       console.log(`✗ ${event.name} → ${created.name}`);
