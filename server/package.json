@@ -4,7 +4,7 @@
   "private": true,
   "description": "Servidor Iraca de Fama Boletería: eventos, etapas de precio, boletas y puerta.",
   "scripts": {
-    "start": "ts-node src/index.ts",
+    "start": "ts-node --transpile-only src/index.ts",
     "dev": "ts-node src/index.ts",
     "test": "node -r ts-node/register --test src/features/events/domain/event.entity.test.ts src/features/events/usecases/events.usecase.test.ts src/features/events/infrastructure/firestore-event.mapper.test.ts src/iraca-explorer/infer.test.ts",
     "seed": "ts-node src/seed-demo.ts"

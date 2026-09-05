@@ -12,6 +12,10 @@ async function main() {
     dirname: path.resolve(__dirname, ".."),
     featureFolder: "src/features",
     iracaConfigPath: "iraca.config.json",
+    // Render/Railway/Fly asignan el puerto por env y esperan que el proceso escuche ahí.
+    // Iraca no lee `process.env.PORT` en ningún lado, y el `port` de `iraca.config.json`
+    // le gana al que se pasa acá — por eso ese campo se sacó del json.
+    port: Number(process.env.PORT) || 2436,
     showOutput: false,
     callback: (port) => {
       console.log(`Fama Boletería escuchando en http://localhost:${port}`);
