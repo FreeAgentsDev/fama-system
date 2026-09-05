@@ -12,11 +12,13 @@ import {
   publicPrice,
   publishEvent,
   rejectPayment,
+  expireStalePendingTickets,
   scanTicket,
   slugify,
   toAdminEventSummary,
   updateEvent,
   voidTicket,
+  wompiIntegritySignature,
 } from "./event.entity";
 
 function event() {
@@ -29,6 +31,25 @@ function event() {
     ],
   });
 }
+
+describe("wompiIntegritySignature", () => {
+  it("coincide con el ejemplo oficial de la doc de Wompi", () => {
+    // https://docs.wompi.co/docs/colombia/widget-checkout-web/#paso-3-genera-una-firma-de-integridad
+    const signature = wompiIntegritySignature(
+      "sk8-438k4-xmxm392-sn2m",
+      2490000,
+      "COP",
+      "prod_integrity_Z5mMke9x0k8gpErbDqwrJXMqsI6SFli6",
+    );
+    assert.equal(signature, "37c8407747e595535433ef8f6a811d853cd943046624a0ec04662b17bbf33bf5");
+  });
+
+  it("cambia si cambia el monto — no se puede reusar la firma de otro precio", () => {
+    const a = wompiIntegritySignature("ref-1", 15000, "COP", "secreto");
+    const b = wompiIntegritySignature("ref-1", 15001, "COP", "secreto");
+    assert.notEqual(a, b);
+  });
+});
 
 describe("normalizePhone", () => {
   it("acepta el number que Iraca produce con forceNumbers", () => {
@@ -153,6 +174,80 @@ describe("agregado Ticket · pagos Wompi", () => {
 
     const retry = issueTicket(rejected.event, "Bruno", "3004445566");
     assert.equal(retry.ok, true);
+  });
+});
+
+describe("carritos abandonados · expiración del cupo", () => {
+  function conReservaDe(minutosAtras: number) {
+    const evt = createEvent({
+      name: "Noche de prueba",
+      date: new Date("2026-10-02T20:00:00.000Z"),
+      stages: [{ name: "Única", price: 10000, capacity: 1 }],
+    });
+    const issued = issueTicket(evt, "Ana", "3001112233");
+    if (!issued.ok) throw new Error("no se pudo reservar");
+    const createdAt = new Date(Date.now() - minutosAtras * 60_000).toISOString();
+    return {
+      event: {
+        ...issued.event,
+        tickets: issued.event.tickets.map((t) => ({ ...t, createdAt })),
+      },
+      ticketId: issued.ticket.id,
+    };
+  }
+
+  it("no toca una reserva reciente", () => {
+    const { event } = conReservaDe(5);
+    const { expired, event: next } = expireStalePendingTickets(event);
+    assert.equal(expired.length, 0);
+    assert.equal(next.stages[0].soldCount, 1);
+    assert.equal(next.status, "sold-out");
+  });
+
+  it("libera el cupo de una reserva vencida y vuelve a permitir vender", () => {
+    const { event } = conReservaDe(45);
+    const { expired, event: next } = expireStalePendingTickets(event);
+    assert.equal(expired.length, 1);
+    assert.equal(next.stages[0].soldCount, 0);
+    assert.equal(next.status, "published");
+
+    const otro = issueTicket(next, "Bruno", "3004445566");
+    assert.equal(otro.ok, true);
+  });
+
+  it("no vuelve a tocar un ticket ya pagado", () => {
+    const { event, ticketId } = conReservaDe(45);
+    const pagado = confirmPayment(event, ticketId, "wompi-tx-9");
+    assert.equal(pagado.ok, true);
+    if (!pagado.ok) return;
+
+    const { expired, event: next } = expireStalePendingTickets(pagado.event);
+    assert.equal(expired.length, 0);
+    assert.equal(next.stages[0].soldCount, 1);
+  });
+
+  it("si el pago llega después de expirar, recupera la boleta y retoma el cupo", () => {
+    const { event, ticketId } = conReservaDe(45);
+    const { event: liberado } = expireStalePendingTickets(event);
+    assert.equal(liberado.stages[0].soldCount, 0);
+
+    // Wompi manda APPROVED tarde: el comprador sí pagó, no puede quedarse sin entrar.
+    const tarde = confirmPayment(liberado, ticketId, "wompi-tx-tarde");
+    assert.equal(tarde.ok, true);
+    if (!tarde.ok) return;
+    assert.equal(tarde.ticket.paymentStatus, "approved");
+    assert.equal(tarde.ticket.status, "issued");
+    assert.equal(tarde.event.stages[0].soldCount, 1);
+  });
+
+  it("sigue siendo idempotente: dos APPROVED seguidos no duplican el cupo", () => {
+    const { event, ticketId } = conReservaDe(1);
+    const uno = confirmPayment(event, ticketId, "wompi-tx-1");
+    assert.equal(uno.ok, true);
+    if (!uno.ok) return;
+    const dos = confirmPayment(uno.event, ticketId, "wompi-tx-1");
+    assert.equal(dos.ok, false);
+    assert.equal(uno.event.stages[0].soldCount, 1);
   });
 });
 

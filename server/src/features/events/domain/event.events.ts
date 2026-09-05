@@ -37,6 +37,9 @@ export const EventSlugTakenDomainEvent = DomainEventKind<{
 export const TicketReservedDomainEvent = DomainEventKind<{
   event: PublicEvent;
   ticket: Ticket;
+  /** Firma de integridad para el widget de Wompi. `undefined` si no hay `WOMPI_INTEGRITY_SECRET`
+   *  configurado (ej. en local sin llaves) — el botón de pago la omite en ese caso. */
+  wompiSignature?: string;
 }>("TicketReservedDomainEvent");
 
 export const EventSoldOutDomainEvent = DomainEventKind<PublicEvent>(

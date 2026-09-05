@@ -10,7 +10,7 @@ export interface ReserveTicketParam {
 
 export abstract class ReserveTicketUsecase extends Usecase<
   ReserveTicketParam,
-  { event: PublicEvent; ticket: Ticket }
+  { event: PublicEvent; ticket: Ticket; wompiSignature?: string }
 > {
   abstract call(param: ReserveTicketParam): Promise<DomainEvent>;
 }

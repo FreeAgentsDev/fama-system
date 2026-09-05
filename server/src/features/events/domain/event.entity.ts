@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export type EventStatus = "published" | "sold-out" | "cancelled";
 export type TicketStatus = "issued" | "checked-in" | "voided";
 export type Presence = "outside" | "inside";
@@ -617,15 +619,30 @@ export function confirmPayment(
   if (!ticket) {
     return { ok: false, reason: "not-found" };
   }
-  if (ticket.paymentStatus !== "pending") {
+  if (ticket.paymentStatus === "approved") {
     return { ok: false, reason: "already-processed" };
   }
+
+  // Un `pending` que se venció ya quedó `rejected` y devolvió su cupo (ver
+  // `expireStalePendingTickets`). Si el APPROVED de Wompi llega después, se recupera el
+  // ticket y se vuelve a tomar el cupo: preferimos sobrevender una boleta antes que
+  // cobrarle a alguien y dejarlo sin entrar.
+  const recuperado = ticket.paymentStatus === "rejected";
   const updated: Ticket = {
     ...ticket,
     paymentStatus: "approved",
+    status: recuperado ? "issued" : ticket.status,
     paymentRef: wompiTransactionId ?? ticket.paymentRef,
   };
-  return { ok: true, event: replaceTicket(event, updated), ticket: updated };
+  const base: Event = recuperado
+    ? {
+        ...event,
+        stages: event.stages.map((item) =>
+          item.name === ticket.stage ? { ...item, soldCount: item.soldCount + 1 } : item,
+        ),
+      }
+    : event;
+  return { ok: true, event: replaceTicket(base, updated), ticket: updated };
 }
 
 export type RejectPaymentResult =
@@ -655,6 +672,50 @@ export function rejectPayment(event: Event, ticketId: string): RejectPaymentResu
         : "sold-out";
 
   return { ok: true, event: { ...withTicket, status: nextStatus }, ticket: updated };
+}
+
+/**
+ * Minutos que una reserva sin pagar retiene el cupo de su etapa.
+ *
+ * Tiene que ser mayor que el `ABANDONED_CART_MINUTES` del panel (12), para que Daniel
+ * alcance a mandar el recordatorio por WhatsApp antes de que el cupo se libere solo.
+ */
+export const PENDING_TICKET_TTL_MINUTES = 30;
+
+/**
+ * Libera el cupo de las reservas que quedaron `pending` y nunca se pagaron.
+ *
+ * `issueTicket` sube el `soldCount` de la etapa apenas se reserva, no cuando se paga. Si el
+ * comprador abandona el checkout y Wompi no manda ni APPROVED ni DECLINED, ese cupo quedaba
+ * ocupado para siempre y la etapa terminaba mostrándose agotada sin estarlo.
+ *
+ * Se llama de forma perezosa (al reservar y al listar eventos), así que no hace falta un cron:
+ * el cupo se recupera la próxima vez que alguien mire el evento. Reusa `rejectPayment`, que ya
+ * es la operación de "esta reserva no prosperó, devuelve el cupo".
+ */
+export function expireStalePendingTickets(
+  event: Event,
+  now: Date = new Date(),
+  ttlMinutes: number = PENDING_TICKET_TTL_MINUTES,
+): { event: Event; expired: Ticket[] } {
+  const cutoff = now.getTime() - ttlMinutes * 60_000;
+  const stale = event.tickets.filter(
+    (ticket) => ticket.paymentStatus === "pending" && Date.parse(ticket.createdAt) < cutoff,
+  );
+  if (stale.length === 0) {
+    return { event, expired: [] };
+  }
+
+  let next = event;
+  const expired: Ticket[] = [];
+  for (const ticket of stale) {
+    const result = rejectPayment(next, ticket.id);
+    if (result.ok) {
+      next = result.event;
+      expired.push(result.ticket);
+    }
+  }
+  return { event: next, expired };
 }
 
 export type ScanTicketResult =
@@ -806,6 +867,27 @@ export function ticketWhatsAppLink(event: Event, ticket: Ticket, boletaUrl?: str
       : "Muéstralo en la puerta el día del evento.",
   );
   return `https://wa.me/57${ticket.phone}?text=${encodeURIComponent(lines.join("\n"))}`;
+}
+
+/**
+ * Firma de integridad que exige el widget de Wompi para abrir el checkout: sin ella algunas
+ * cuentas rechazan la transacción directamente, y sin ella tampoco hay nada que impida que
+ * alguien manipule el monto o la referencia antes de abrir el widget en el navegador.
+ * SHA256(referencia + monto en centavos + moneda + secreto de integridad), en ese orden exacto.
+ * https://docs.wompi.co/docs/colombia/widget-checkout-web/#paso-3-genera-una-firma-de-integridad
+ *
+ * Se computa en el server (`ReserveTicketUsecaseImpl`) y nunca en el navegador: el secreto de
+ * integridad no puede llegar al frontend, o cualquiera podría firmar un monto falso.
+ */
+export function wompiIntegritySignature(
+  reference: string,
+  amountInCents: number,
+  currency: string,
+  integritySecret: string,
+): string {
+  return createHash("sha256")
+    .update(`${reference}${amountInCents}${currency}${integritySecret}`)
+    .digest("hex");
 }
 
 export function findTicket(
