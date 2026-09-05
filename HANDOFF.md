@@ -1,22 +1,115 @@
 # Fama System — estado del trabajo (handoff)
 
-Contexto para continuar el desarrollo. Última actualización: 4 sep 2026.
+Contexto para continuar el desarrollo. Última actualización: 5 sep 2026.
+
+## ✅ Bug del pago — RESUELTO (5 sep, sesión de la tarde)
+
+**Síntoma:** al hacer clic en "Apartar mi boleta" el pago se quedaba cargando para siempre.
+
+**Causa raíz (confirmada, no hipótesis):** el `redirect-url` que le mandábamos a Wompi era
+`http://localhost:3000/...`. El WAF de AWS que está delante de `checkout.wompi.co` responde
+**403 (CloudFront "Request blocked")** a cualquier request cuyo `redirect-url` apunte a una
+dirección local o privada. Medido contra el checkout real, misma llave y misma firma:
+
+| `redirect-url` | Respuesta |
+|---|---|
+| `http://localhost:3000/…` | **403** |
+| `http://127.0.0.1:3000/…` | **403** |
+| `http://192.168.1.10:3000/…` | **403** |
+| `https://fama-system.vercel.app/…` | 200 |
+| `http://lvh.me:3000/…` | 200 |
+
+Con el 403, el iframe del widget carga la página de error de CloudFront en vez del checkout,
+así que nunca le reporta su altura al padre y `.waybox-modal` se queda en `height: 0`. Medido
+en el DOM: `.waybox-backdrop` 900px (el fondo oscuro que se veía) y `.waybox-modal` **0px**.
+Por eso no había ningún error en la consola: el fallo pasa del lado del servidor de Wompi,
+dentro del iframe.
+
+**Las tres hipótesis del handoff anterior eran falsas:**
+
+- ❌ *La cuenta sandbox no completó la activación.* No. El checkout renderiza perfecto
+  ("MODO DE PRUEBAS", "Pago a freeagents", el monto, y tarjeta / Nequi / DaviPlata / QR
+  interoperable / Transferencia Bancolombia). **No hay nada que hacer en comercios.wompi.co.**
+- ❌ *Bloqueo de red del navegador (extensión, ad-blocker).* No, es del lado del servidor.
+- ❌ *El 403 de CloudFront era por la IP del entorno del agente.* No: era el `localhost` del
+  `redirect-url`, exactamente lo mismo que le pasaba a Miguel en su navegador. `widget.js` y
+  `/p/` sin `redirect-url` local devuelven 200 desde la misma máquina.
+
+**Arreglo:** `web/lib/checkout-origin.ts` — nunca se manda `window.location.origin` a secas.
+En producción sale de `NEXT_PUBLIC_PUBLIC_URL`; en local se reescribe el host a `lvh.me`, un
+dominio público que resuelve a 127.0.0.1, así que el WAF lo acepta y el redirect sigue
+llegando al `next dev` de siempre.
+
+**Verificado de punta a punta:** navegando en `localhost:3000`, el modal de Wompi abre dentro
+de la app (altura 1433px, antes 0) con todos los métodos de pago.
+
+## 🔴 Bloqueador de la demo que sigue abierto: el webhook no llega a localhost
+
+El **único** camino que pasa un ticket de `pending` a `approved` es el POST que Wompi le hace
+a `web/app/api/wompi/webhook/route.ts`. Los servidores de Wompi no pueden alcanzar
+`localhost:3000` (ni `lvh.me:3000`, que del lado de ellos resuelve a su propia máquina).
+
+Consecuencia: **en una demo 100% local el pago no se puede completar.** El comprador paga, lo
+redirige a la boleta, y esa página se queda en "Confirmando tu pago" para siempre.
+
+Para el lunes hay que elegir uno:
+
+1. **Desplegar** (`web` a Vercel + `server` a Railway) — es lo que ya estaba en la lista, y
+   deja la demo abrible desde el celular de Daniel. Ver el runbook abajo.
+2. **Túnel** (`ngrok http 3000` o `cloudflared`) — expone el localhost con una URL pública.
+   Hay que poner esa URL como `NEXT_PUBLIC_PUBLIC_URL` en `web/.env.local` y registrarla como
+   URL de eventos en el dashboard de Wompi. Sirve para el lunes sin desplegar nada.
+
+Un camino más robusto para después (no hace falta el lunes): al volver del checkout, Wompi
+agrega `id=<transaction_id>` a la URL de redirección. La página de la boleta podría consultar
+la transacción contra la API pública de Wompi y confirmar sin depender del webhook. Eso haría
+que el flujo funcione incluso en local.
+
+## Runbook de deploy (pendiente, necesita las cuentas de Miguel)
+
+**Dominio de la demo: `fama.freeagentsdev.com`** (provisional, hasta que Daniel pague uno
+propio). Ya resuelve a Vercel. Verificado que el WAF de Wompi lo acepta (200), así que sirve
+tanto de `redirect-url` como de destino del webhook.
+
+**Estado medido el 5 sep:** `https://fama.freeagentsdev.com/` devuelve el **404 de plataforma
+de Vercel** (`NOT_FOUND`, no el 404 de Next.js) — o sea, el Root Directory sigue sin corregir.
+
+**Ojo primero:** `master` está sincronizado con `origin`, pero **todo el trabajo del 5 sep
+sigue sin commitear**. Lo que hay desplegado no tiene ninguno de los arreglos del pago. Hay
+que commitear y pushear antes de que el deploy sirva de algo.
+
+1. `server/` → Railway. Ya hay `server/Dockerfile`. Variables: las de `server/.env.example`
+   (incluidas las 4 de Wompi y `WEB_URL=https://fama.freeagentsdev.com`).
+2. `web/` → Vercel. El 404 es porque es un monorepo sin `package.json` en la raíz:
+   **Settings → General → Root Directory = `web`**.
+3. Variables en Vercel (Settings → Environment Variables): `IRACA_URL` y
+   `NEXT_PUBLIC_IRACA_URL` con la URL pública de Railway (ya no `localhost:2436`),
+   `NEXT_PUBLIC_PUBLIC_URL=https://fama.freeagentsdev.com`, `NEXT_PUBLIC_WOMPI_KEY`,
+   `WOMPI_EVENTS_SECRET`, `INTERNAL_WEBHOOK_SECRET` (idéntico al del server),
+   `FAMA_ADMIN_PIN`, `ADMIN_SESSION_SECRET`.
+4. En el dashboard de Wompi, registrar la URL de eventos:
+   `https://fama.freeagentsdev.com/api/wompi/webhook`.
+
+Sin el paso 1 (Railway) el sitio despliega pero no muestra eventos: `web` le pega a `IRACA_URL`
+para todo.
 
 ## Qué es esto
 
 Boletería virtual para **Fama MZL** (discoteca en Manizales), cliente **Daniel**.
 
-- `server/` — backend Iraca (Node/TypeScript) + Firestore → Railway
-- `web/` — frontend Next.js 16: público, admin y scanner de puerta → Vercel
+- `server/` — backend Iraca (Node/TypeScript) + Firestore → Railway (**todavía no desplegado**)
+- `web/` — frontend Next.js 16: público, admin y scanner de puerta → Vercel, en
+  `fama.freeagentsdev.com` (**sigue dando el 404 de plataforma** — ver el runbook de deploy)
 
-**Alcance contratado:** la propuesta (github.com/m1gue21/fama-propuesta, `docs/PROPUESTA-DANIEL.md`)
-tiene 3 tiers acumulativos. Daniel eligió el **tier 2 "La boleta": $2.500.000 de armado +
-$250.000/mes** a partir del día 60. Incluye: publicación de fechas, etapas de precio
+**Alcance contratado:** la propuesta (github.com/m1gue21/fama-propuesta, `docs/PROPUESTA-DANIEL.md`,
+pública) tiene 3 piezas acumulativas. Daniel eligió la **pieza 2 "La boleta": $2.500.000 de
+armado + $250.000/mes** a partir del día 60. Incluye: publicación de fechas, etapas de precio
 ("el precio sube solo"), pasarela Wompi, boleta digital con QR y control de puerta.
-El tier 3 (mesas y clientes, +$1.500.000) **no** está contratado — no construir eso.
+La pieza 3 (mesas y clientes, +$1.500.000) **no** está contratada — no construir eso.
 
 **Nota comercial:** Daniel todavía no ha pagado nada. El objetivo inmediato es una demo
-convincente para pedirle el anticipo.
+convincente el **lunes** para pedirle el primer pago. Ver "Plan comercial para el lunes" abajo
+— no es solo una nota, es contexto que debería informar qué se prioriza de acá a esa fecha.
 
 **Regla de negocio clave:** el precio que se carga en una etapa es **lo que recibe Daniel**.
 El sistema le suma la comisión de Wompi (`WOMPI_FEE_RATE` en `event.entity.ts`) para calcular
@@ -28,217 +121,149 @@ el precio público. El comprador absorbe la comisión, no el venue.
 cd server && pnpm install && pnpm start   # :2436
 cd web    && pnpm dev                     # :3000
 cd server && pnpm seed                    # 3 eventos reales + ventas de demo
-cd server && pnpm test                    # 30 tests
+cd server && pnpm test                    # 53 tests
 ```
 
 - Panel admin: `http://localhost:3000/admin/eventos` — PIN en `web/.env.local` (`FAMA_ADMIN_PIN`, local = `1234`).
-  Ojo: **`/admin` a secas da 404**, no hay página índice. Rutas reales: `/admin/eventos`, `/admin/sala`, `/admin/login`.
+  Ojo: **`/admin` a secas da 404**, no hay página índice. Rutas reales: `/admin/eventos`, `/admin/salas`, `/admin/login`.
 - Explorador de endpoints: `http://localhost:2436/docs` (y `/docs.json`).
 - Sin credenciales de Firebase, el store es un **`Map` en memoria**: los datos se pierden en
   cada reinicio del server. Por eso hay que volver a correr `pnpm seed` después de reiniciar.
+- `server/.env` y `web/.env.local` ya tienen las llaves sandbox de Wompi (cuenta de pruebas
+  propia de Miguel, no la de Daniel — así se hace a propósito, ver doc de Wompi:
+  sandbox y producción son ambientes completamente separados).
 
-## Trabajado en la sesión anterior (ya commiteado en `master`)
+## Plan comercial para el lunes (contexto, no código)
 
-### Bugs encontrados y arreglados
+- **Objetivo:** demo en vivo + pedir el primer pago.
+- **Anticipo recomendado:** 50% ahora ($1.250.000), 50% restante contra el go-live real en
+  producción (no en sandbox). El mensual de $250.000 arranca a los 60 días — falta acordar
+  con Daniel desde cuándo cuentan esos 60 días (¿desde el anticipo? ¿desde el go-live?).
+- **Confirmado con la doc oficial de Wompi** (`docs.wompi.co`), no adivinado:
+  - Wompi vs Bold en la propuesta era un "o": con Wompi solo, la promesa **sí se cumple**.
+  - **Bre-B no se puede ofrecer todavía para cobrar** — Wompi no lo tiene en su lista de
+    métodos de pago de transacciones (`/docs/colombia/metodos-de-pago/`). Lo único que
+    existe con ese nombre está marcado "Próximamente" y es para *pagar a terceros*
+    (dispersiones), un producto totalmente distinto. Hay que decírselo a Daniel tal cual:
+    limitación de Wompi, no nuestra.
+  - PSE, Nequi, tarjeta y botón de Transferencia Bancolombia **sí están disponibles**.
+  - La propuesta promete que pagar con Nequi/Bre-B es "sin cargo de pasarela" — **hoy el
+    sistema cobra la comisión de Wompi a todos por igual**, sin importar el método elegido
+    (el precio se fija antes de que el comprador escoja cómo paga en el widget). Cumplirlo
+    de verdad requiere saber el método antes de calcular el precio — no es trivial. Pendiente
+    de decidir con Daniel: ¿se ajusta el alcance, o se construye después?
+- **Carritos abandonados:** Daniel pidió esto y Miguel ya dijo que sí — no estaba en la
+  propuesta original, pero se decidió incluirlo en el precio ya cotizado (no cobrar aparte).
 
-1. **`ListPublishedEventsUsecase` quedaba registrado como POST.** En `events.controller.ts`
-   el patrón `/Publish/` hacía match con "List**Publish**edEvents", y como el grupo POST se
-   evalúa primero (ver `getMethodToUse` en el helper de Iraca: primer grupo que matchea gana
-   y hace `break`), el endpoint quedaba en POST. El front lo llama con GET → 404 → el
-   `try/catch` de `web/app/page.tsx` lo convertía en "Aún no hay fechas publicadas" aunque el
-   evento estuviera publicado. **Arreglo:** anclar todos los patrones con `^`.
+## Sesión del 5 sep — hecho
 
-2. **Nada cargaba `server/.env`.** No hay `dotenv` ni `--env-file`, e Iraca no lee archivos
-   `.env`. Resultado: `INTERNAL_WEBHOOK_SECRET` llegaba `undefined` y `ConfirmPaymentUsecase`
-   rechazaba **todos** los pagos con "internalSecret inválido" en local. En Railway no se nota
-   porque la plataforma inyecta las variables. **Arreglo:** `server/src/load-env.ts` con
-   `process.loadEnvFile()` (Node 20.12+), sin dependencias nuevas, inocuo en producción.
+### 1. Carritos abandonados (visibilidad + recordatorio manual)
+Nada de API de Meta, nada automático — coherente con el resto del sistema. En
+`web/components/admin/event-detail.tsx`:
+- Tarjeta "Carritos abandonados" en el admin de cada evento: tickets `pending` con más de
+  12 min (`ABANDONED_CART_MINUTES`), con hace cuánto y botón "Recordar" que abre WhatsApp
+  con un mensaje ya escrito.
+- 100% frontend, no toca el backend de pagos.
 
-### Agregado
+**Bug de fondo que esto dejó al descubierto, sin arreglar todavía:** un ticket `pending`
+ocupa el cupo de la etapa desde que se reserva, no desde que se paga (`issueTicket` sube
+`stage.soldCount` de una vez). Si alguien abandona el carrito sin que Wompi mande ni
+`APPROVED` ni `DECLINED`, ese cupo queda perdido para siempre — nadie lo libera. Con tráfico
+real esto hace que una etapa se muestre "agotada" sin estarlo. Arreglarlo bien es tocar el
+dominio de pagos; no se hizo por prudencia justo antes de la demo. **Hay que resolverlo antes
+de que Daniel reciba pagos reales.** `rejectPayment()` en `event.entity.ts` ya tiene la lógica
+de liberar cupo (se usa cuando Wompi manda `DECLINED`) — la solución más simple es una
+expiración diferida que reuse ese mismo mecanismo cuando un `pending` pasa de cierto tiempo,
+llamada de forma perezosa desde `reserve-ticket`/`list-events` (sin necesitar un cron).
 
-3. **`/docs` — explorador de endpoints de Iraca.** Portado desde
-   `~/Desktop/scifamek/server/src/iraca-explorer` (repo `m1gue21/iraca-practica`, público).
-   Lee `controller.httpRoutesTable`, infiere los `DomainEvent` de los `*.usecase-impl.ts` y el
-   JSON de ejemplo de las `interface *Param`. Muestra con qué método HTTP quedó cada usecase,
-   que es justo lo que costó descubrir el bug 1. Conectado en `server/src/index.ts`. Su test
-   (`infer.test.ts`) ya está en el script `test`.
+### 2. Reenviar boleta pagada por WhatsApp
+La boleta (`web/app/[slug]/boleta/[ticketId]/page.tsx`) decía *"también te lo enviamos por
+WhatsApp"* sin que fuera cierto — el link `wa.me` se calculaba en el backend
+(`ticketWhatsAppLink` en `event.entity.ts`) pero nadie lo usaba. Arreglado con dos piezas:
+- Comprador: botón "Enviarme el link por WhatsApp" (`web/components/public/whatsapp-send-button.tsx`),
+  usa `wa.me/?text=...` **sin número** (el endpoint público no expone el teléfono a
+  propósito) — abre WhatsApp y la persona elige a quién mandárselo.
+- Admin: botón "Reenviar" junto a cada comprador confirmado en `event-detail.tsx`, sí usa el
+  teléfono (vista autenticada).
 
-4. **`server/src/seed-demo.ts` (`pnpm seed`)** — crea las 3 noches reales sacadas de
-   `fama-propuesta` (`lib/examples.ts`, `fama-admin/lib/seed.ts`), con sus flyers originales ya
-   copiados a `web/public/eventos/`. Genera las ventas por el camino real (`reserve-ticket` →
-   `confirm-payment` con el mismo `internalSecret` del webhook), nada escrito a mano en el store.
-   Cupo 20 por etapa:
-   - **Precupido** (12 sep) — casi lleno: 17/20 en preventa
-   - **Love House Session** (19 sep) — 1.ª etapa agotada 20/20 + 6 en la 2.ª (demuestra el salto de etapa)
-   - **Girls Power** (26 sep) — vacío, recién publicado
+**Pendiente sin tocar:** en la página de compra del evento (`/[slug]`) todavía dice "Recibe
+tu QR por WhatsApp" en el paso 3 — misma promesa, mismo lugar sin resolver, no se llegó a
+revisar esta sesión.
 
-   Las fechas originales de la propuesta (agosto) ya pasaron, por eso están movidas a futuro.
+### 3. Dos bugs reales de la pasarela (encontrados al tener llaves reales por primera vez)
+1. **Firma de integridad de Wompi nunca se mandaba.** `WOMPI_INTEGRITY_SECRET` estaba en
+   `.env.example` pero no se usaba en ningún lado. Sin ella, cuentas configuradas para
+   exigirla rechazan el pago. Agregado `wompiIntegritySignature()` en `event.entity.ts`
+   (con test que reproduce **exacto** el ejemplo oficial de la doc de Wompi), calculada en
+   `reserve-ticket.usecase-impl.ts` y mandada desde `wompi-checkout-button.tsx`.
+2. **`checkout.open()` se llamaba sin argumentos.** El widget de Wompi exige una función de
+   respuesta — sin ella tira `"Debes especificar una función de respuesta"` y **nunca abre,
+   para nadie**, ni antes de esta sesión. No se pudo detectar antes porque sin llave sandbox
+   el código nunca llegaba a esa línea. Arreglado pasando un callback mínimo (solo loguea,
+   la navegación real la hace `redirectUrl` y la confirmación real el webhook).
 
-### Archivos tocados
+Verificado: 48/48 tests del server pasan (incluye el nuevo de la firma), `tsc`/`eslint`
+limpios en `server/` y `web/`. La URL final generada del checkout se armó y se comparó a
+mano — coincide en cada parámetro.
 
+### 4. Deploy a Vercel — hecho, con 404 a resolver
+Miguel ya corrió el deploy (`fama-system.vercel.app`). Daba **404 de plataforma** (Vercel,
+no de la app — CloudFront/Vercel edge, no Next.js). Diagnóstico: este es un monorepo
+(`server/` + `web/`, sin `package.json` en la raíz) y Vercel necesita que **Root Directory**
+esté puesto en `web` (Settings → General). Además faltan las env vars de producción
+(`IRACA_URL`, `NEXT_PUBLIC_IRACA_URL`, `FAMA_ADMIN_PIN`, `ADMIN_SESSION_SECRET`, llaves de
+Wompi) en Settings → Environment Variables — y ojo, `IRACA_URL` no puede seguir apuntando a
+`localhost:2436`, necesita el backend desplegado en algún lado (Railway, según el README).
+**No confirmado si ya se corrigió** — revisar esto antes que nada más de infraestructura.
+
+### Archivos tocados hoy
 ```
-M server/package.json                                        (scripts test + seed)
-M server/src/features/events/infrastructure/events.controller.ts  (bug 1)
-M server/src/index.ts                                        (loadEnv + attachIracaExplorer)
-? server/src/iraca-explorer/                                 (nuevo, portado)
-? server/src/load-env.ts                                     (bug 2)
-? server/src/seed-demo.ts                                    (nuevo)
-? web/public/eventos/                                        (3 flyers)
+M server/src/features/events/domain/event.entity.ts          (wompiIntegritySignature)
+M server/src/features/events/domain/event.entity.test.ts     (test contra ejemplo oficial Wompi)
+M server/src/features/events/domain/event.events.ts          (wompiSignature en TicketReservedDomainEvent)
+M server/src/features/events/usecases/reserve-ticket.usecase-impl.ts
+M server/src/features/events/usecases/reserve-ticket.usecase.ts
+M web/app/[slug]/boleta/[ticketId]/page.tsx                   (copy honesto + botón WhatsApp)
+M web/components/admin/event-detail.tsx                       (carritos abandonados + reenviar)
+M web/components/wompi-checkout-button.tsx                    (firma + callback de open())
+M web/lib/api.ts                                               (wompiSignature en ReservedTicket)
+? web/components/public/whatsapp-send-button.tsx               (nuevo)
+M server/.env, web/.env.local                                  (llaves sandbox — NO commiteadas)
 ```
 
-Estado: `tsc --noEmit` limpio, **30/30 tests pasando**. Commiteado en `b0c9f9c`, `e5bc07f` y `da80d8e`.
+## Sesión del 5 sep (tarde) — hecho
 
+1. **Bug del pago resuelto** — ver la sección de arriba. `web/lib/checkout-origin.ts` (nuevo)
+   + un cambio de una línea en `wompi-checkout-button.tsx`.
+2. **Bug de capacidad de carritos abandonados — arreglado.** `expireStalePendingTickets()` y
+   `PENDING_TICKET_TTL_MINUTES = 30` en `event.entity.ts`, con el helper
+   `usecases/release-stale-holds.ts` llamado de forma perezosa desde `reserve-ticket`,
+   `get-event-by-slug` y `list-events`. Sin cron: el cupo se recupera la próxima vez que
+   alguien mire el evento. Los 30 min son mayores que los 12 de `ABANDONED_CART_MINUTES`
+   para que Daniel alcance a mandar el recordatorio antes de que el cupo se libere.
+   `confirmPayment()` ahora **recupera** un ticket que ya había expirado si el APPROVED de
+   Wompi llega tarde (se prefiere sobrevender una boleta antes que cobrar y no entregar).
+3. **Copy honesto en `/[slug]`**: el paso 3 decía "Recibe tu QR por WhatsApp" sin que hubiera
+   envío automático. Ahora dice "Recibe tu QR al instante"; el botón de WhatsApp sigue estando
+   en la página de la boleta.
 
-## Pendientes
+Verificado: **53/53 tests** del server (5 nuevos de expiración), `tsc` limpio en `server/` y
+`web/`, `eslint` limpio en `web/`. Ojo: `server/` **no tiene** script de lint, al contrario de
+lo que decía el handoff anterior.
 
-### Verificación por roles — HECHA (4 sep)
+## Pendientes heredados de sesiones anteriores (sin resolver todavía)
 
-Barrido completo con los datos del seed, server y web levantados. Todo lo de abajo
-se probó de verdad, no por lectura de código:
-
-| Superficie | Resultado |
-|---|---|
-| Cartelera `/` | ✅ 3 eventos, flyers, etapa y precio correctos |
-| Evento `/[slug]` | ✅ precio público, "Quedan 3 boletas a este precio" (20−17) |
-| Boleta `/[slug]/boleta/[id]` | ✅ QR PNG 320×320 renderiza, nombre, etapa y código |
-| Scanner `/puerta` | ✅ admite por código manual; backend pasó a `inside:1, entries:1` |
-| Sala en vivo `/admin/sala` | ✅ SSE en vivo: contador 1→2 y "Santiago Ramírez entró" sin recargar |
-| Admin `/admin/eventos` | ✅ PIN, listado, vendidos y recaudo correctos |
-| Detalle + CSV | ✅ CSV real capturado: 18 líneas, comillas escapadas, estado "Adentro" |
-| Ocultar / Publicar | ✅ round-trip completo |
-
-**Bug nuevo encontrado y arreglado (`9e0d99f`):** la cartelera y la descripción
-OpenGraph mostraban `currentStage.price` (lo que recibe Daniel) en vez de
-`publicPrice` (lo que paga el comprador). Se veía "Desde $15.000" en la cartelera y
-al compartir el link, y $15.448 al pagar. Ahora ambas usan `publicPrice`.
-
-### Bugs sospechados — resueltos
-
-- ~~`listPublished()` no filtra ocultos~~ → **falsa alarma.** `hideEvent()` pone
-  `status: "cancelled"`, y el filtro `status !== "cancelled"` es justo lo que lo
-  saca de la cartelera. Verificado: al ocultar, el evento desaparece de `/`, y
-  entrar directo a `/[slug]` muestra "Este evento ya no está disponible" sin botón
-  de compra. `EventStatus` no necesita un estado "hidden" nuevo.
-- ~~`page.tsx` traga errores~~ → **arreglado** (`9e0d99f`). Distingue cartelera
-  vacía de fallo de carga y loguea el error. Verificado levantando el web contra un
-  backend muerto: muestra "No pudimos cargar la cartelera".
-- ~~`revalidate` + `no-store`~~ → **arreglado** (`9e0d99f`). Confirmado en los docs
-  de Next 16 (`02-guides/caching-without-cache-components.md`): un fetch con
-  `no-store` fuerza render dinámico y el `revalidate` del segmento no lo pisa. Era
-  configuración muerta; se quitó de `page.tsx` y de `[slug]/page.tsx`.
-
-### Correcciones a este documento
-
-- El botón de Wompi **sí renderiza** sin `NEXT_PUBLIC_WOMPI_KEY`; falla al hacer
-  clic con "Falta configurar NEXT_PUBLIC_WOMPI_KEY". No bloquea la demo visual.
-- El script del widget (`checkout.wompi.co/widget.js`) **ya está** cargado en
-  `app/layout.tsx:36` y `window.WidgetCheckout` carga bien. Lo único que falta es
-  la llave.
-
-### Faltantes para producción
-
-- **`NEXT_PUBLIC_WOMPI_KEY` (`pub_test_…`) en `web/.env.local`** — es lo único que
-  falta para probar el pago end-to-end. Todo lo demás del checkout está listo.
-- Wompi está en **sandbox**; falta pasar a llaves productivas (requiere aprobación
-  de Daniel).
-- **Bold** aparece en la propuesta pero **no está implementado** (solo Wompi).
-  Confirmar con Daniel si entra en el alcance o se aclara que quedó fuera.
-- Credenciales de Firestore para que los datos persistan (`FIREBASE_PROJECT_ID`,
-  `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`). Sin ellas hay que re-correr
-  `pnpm seed` en cada reinicio del server.
+- **Flyers con fecha vieja impresa** ("13 de Agosto" en Precupido) — Miguel decidió que esto
+  espera, no es prioridad para el lunes.
+- **`Bold`** aparece en la propuesta pero no está implementado — ya resuelto conceptualmente
+  (Wompi solo cumple la promesa, era un "o"), no hace falta construirlo.
+- **Firestore** sin credenciales — datos en memoria, se pierden al reiniciar. No bloquea la
+  demo si no se reinicia el server a mitad de la demo.
 - **No hay tests en `web/`**, solo en `server/`. El webhook de Wompi
-  (`app/api/wompi/webhook/route.ts`) es lo más crítico.
-- **`create-event` no valida que el slug sea único.** Se descubrió porque correr
-  `pnpm seed` dos veces duplicaba las 3 noches en la cartelera. El seed ya se
-  protege (`3c7b538`), pero el hueco sigue en el dominio: Daniel puede crear dos
-  eventos con el mismo slug desde el admin y `/[slug]` resolvería a cualquiera de
-  los dos. Falta un `EventSlugTakenDomainEvent` y su manejo en el form del admin.
-- Desplegar: server a Railway, web a Vercel, con dominio para la demo.
-
-### Pulido menor — hecho
-
-- ~~"1 PERSONAS ADENTRO"~~ → singular arreglado.
-- ~~Error de cámara en inglés~~ → `/puerta` traduce los errores de `getUserMedia`
-  por nombre (`NotAllowedError`, `NotFoundError`, `NotReadableError`) y cada uno
-  dice qué hacer.
-- **Pendiente:** los flyers son los originales de la propuesta y traen la fecha
-  vieja impresa ("13 de Agosto" en Precupido) mientras el texto dice 12 de
-  septiembre. No se arregla desde el código: hay que regenerar las imágenes.
-  Daniel lo va a notar en la demo.
-
-## Ampliación del admin (4 sep)
-
-### Edición de eventos
-`updateEvent()` en el dominio + `UpdateEventUsecase` (`POST /events/update-event`) y
-`/admin/eventos/[id]/editar`. Se editan nombre, enlace, fecha, sede, flyer y etapas.
-
-Lo que **no** se puede hacer, y por qué —cualquiera de las dos dejaría boletas
-emitidas sin respaldo:
-- quitar una etapa que ya vendió
-- dejarle a una etapa un cupo menor a lo que ya vendió
-
-El `pricePaid` de quien ya compró nunca se toca: vive en el ticket, no en la etapa,
-así que subir un precio no le recobra nada a nadie. Renombrar una etapa manda
-`previousName` y arrastra el nombre a sus tickets — sin eso, un renombre se vería
-como borrar+crear y perdería el `soldCount`. Un evento oculto sigue oculto después
-de editarlo.
-
-El formulario aplica las mismas reglas antes de enviar (cupo mínimo, botón de quitar
-bloqueado) y el server las valida igual.
-
-### Slug único
-`EventSlugTakenDomainEvent` en create y en update. Era el hueco anotado antes: el
-slug es la URL pública, y repetido hacía que `/[slug]` resolviera a cualquiera de las
-dos noches.
-
-### Control de puerta
-- Filtros con conteo: Todos · Adentro · Afuera · Sin entrar · Anuladas. **"Afuera"
-  (entró y se fue) y "Sin entrar" (nunca llegó) están separados a propósito:** en la
-  puerta no es la misma pregunta.
-- "Marcar entrada"/"Marcar salida" a mano, para cuando el QR no se deja leer. Va por
-  el mismo `scan-ticket` que la puerta con `gate: "admin"`, así queda registrado con
-  hora y origen y la sala en vivo se entera igual.
-- Historial de movimientos por boleta, con hora y si vino de la puerta o del admin.
-- El CSV suma `entradas` y `ultimo_movimiento`.
-
-### Salas en vivo
-`/admin/salas` (antes `/admin/sala`, que mostraba una noche a la vez en un select).
-Todas las noches juntas, en vivo por SSE, y cada tarjeta se adapta a en qué va:
-
-| Fase | Qué muestra |
-|---|---|
-| En curso | adentro · salieron · sin llegar, barra de ocupación, último movimiento |
-| Próxima | vendidas, recaudo, etapa vigente, cupo restante |
-| Terminada | **% de asistencia**, cuántos asistieron, cuántos compraron y no llegaron |
-
-Una noche con gente adentro cuenta como "en curso" aunque el reloj diga otra cosa.
-Arriba va el total de personas adentro y cuántas salas están activas; abajo, el feed
-de movimientos de todas las noches con el evento al que pertenece cada uno.
-
-Para esto `AdminEventSummary` creció con la ocupación (`inside`, `outside`,
-`attended`, `neverEntered`, `entries`, `voided`, `remaining`, `lastScanAt`), así el
-panel se arma con una sola llamada a `list-events` en vez de pedir el box office de
-cada evento.
-
-**Ojo con `outside`:** en el dominio significa "no está adentro", así que incluye a
-quien compró y nunca llegó. Para asistencia hay que usar `attended` (entró al menos
-una vez); los que entraron y se fueron son `attended - inside`.
-
-### Dos trampas de Next 16 que ya están resueltas
-- **Fechas e hidratación.** `Intl.DateTimeFormat` con `timeStyle` mete U+00A0 antes
-  de "p. m." en Node y un espacio normal en el navegador — misma locale, misma zona,
-  distinta data ICU. En un componente cliente eso rompe la hidratación con dos
-  strings que se ven idénticos. `lib/format.ts` normaliza los espacios; úsalo para
-  cualquier fecha que se renderice en las dos pasadas.
-- **`Date.now()` en render.** La regla `react-hooks/purity` lo rechaza, y con razón.
-  El timestamp del server se lee en `lib/salas.ts` (capa de datos) con `connection()`
-  para diferirlo a request time; la página solo renderiza lo que recibe.
-
-### Fuera de alcance, a propósito
-La **base de clientes cruzada entre eventos** ("quién vino, a qué noche") es tier 3
-en la propuesta ($1.500.000, no contratado) y **no se construyó**. Lo que sí está
-—porque el tier 2 lo incluye explícitamente— es la lista de quién compró *por evento*
-y el control de entradas/salidas.
+  (`app/api/wompi/webhook/route.ts`) es lo más crítico sin cubrir.
+- **La promesa de "Nequi/Bre-B sin cargo de pasarela"** de la propuesta sigue sin cumplirse:
+  hoy se cobra la comisión a todos por igual. Pendiente de decidir con Daniel.
+- Desplegar `server/` a Railway — sigue sin hacerse.
 
 ## Cosas que ya están bien (no romper)
 
@@ -246,4 +271,9 @@ La seguridad está sólida y revisada: firma de Wompi con `timingSafeEqual`, ses
 PIN con HMAC (el PIN nunca va en la cookie), comparaciones en tiempo constante, y el cliente
 `lib/iraca-server.ts` es server-only a propósito para que el navegador nunca llame endpoints de
 admin directo. El webhook tiene tests de idempotencia y de liberación de cupo cuando un pago se
-rechaza.
+rechaza. Los dos "trampas de Next 16" (hidratación de fechas en `lib/format.ts`, `Date.now()`
+fuera del render en `lib/salas.ts`) siguen resueltas — no reintroducirlas.
+
+Historial completo de sesiones anteriores (edición de eventos, slug único, control de puerta,
+salas en vivo, verificación por roles) queda en el historial de git de este archivo —
+recórtalo de acá si hace falta espacio, pero no hace falta repetirlo en cada handoff nuevo.
