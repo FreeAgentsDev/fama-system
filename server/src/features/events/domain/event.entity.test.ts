@@ -432,3 +432,34 @@ describe("updateEvent", () => {
     assert.throws(() => updateEvent(event(), { stages: [] }), /al menos una etapa/);
   });
 });
+
+describe("toAdminEventSummary · ocupación", () => {
+  it("cuenta como asistente a quien entró aunque ya se haya ido", () => {
+    const sold = issueTicket(event(), "Ana", "3001234567");
+    assert.ok(sold.ok);
+    // Sin pago confirmado la puerta no deja entrar, así que el escaneo no contaría.
+    const pagado = confirmPayment(sold.event, sold.ticket.id, "wompi-tx-1");
+    assert.ok(pagado.ok);
+    const dentro = scanTicket(pagado.event, sold.ticket.code, "puerta");
+    assert.ok(dentro.ok);
+    const fuera = scanTicket(dentro.event, sold.ticket.code, "puerta");
+    assert.ok(fuera.ok);
+
+    const resumen = toAdminEventSummary(fuera.event);
+    assert.equal(resumen.inside, 0, "ya salió");
+    assert.equal(resumen.outside, 1);
+    assert.equal(resumen.attended, 1, "sigue contando como asistente de la noche");
+    assert.equal(resumen.neverEntered, 0);
+    assert.equal(resumen.entries, 1);
+    assert.ok(resumen.lastScanAt);
+  });
+
+  it("separa a quien compró y nunca llegó", () => {
+    const sold = issueTicket(event(), "Ana", "3001234567");
+    assert.ok(sold.ok);
+    const resumen = toAdminEventSummary(sold.event);
+    assert.equal(resumen.attended, 0);
+    assert.equal(resumen.neverEntered, 1);
+    assert.equal(resumen.lastScanAt, undefined);
+  });
+});

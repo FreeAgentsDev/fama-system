@@ -80,7 +80,11 @@ export interface PublicEvent {
   entries: number;
 }
 
-/** Fila de la tabla `/admin/eventos` — un resumen liviano por evento, no manda los tickets. */
+/**
+ * Fila de la tabla `/admin/eventos` y tarjeta de `/admin/salas` — resumen por evento sin
+ * mandar los tickets. Trae la ocupación para que la vista de salas pueda mostrar todas las
+ * noches en vivo con una sola llamada, en vez de pedir el box office de cada una.
+ */
 export interface AdminEventSummary {
   id: string;
   name: string;
@@ -93,6 +97,20 @@ export interface AdminEventSummary {
   capacity: number;
   /** Suma de `pricePaid` de los tickets con pago aprobado (lo que recibe Daniel). */
   revenue: number;
+  remaining: number;
+  /** Adentro ahora mismo. */
+  inside: number;
+  /** Entró y ya salió. */
+  outside: number;
+  /** Entró al menos una vez. Es el número de asistencia real de la noche. */
+  attended: number;
+  /** Compró y nunca cruzó la puerta. */
+  neverEntered: number;
+  /** Total de entradas contadas (alguien que entra, sale y vuelve suma 2). */
+  entries: number;
+  voided: number;
+  /** Hora del último movimiento en la puerta; `undefined` si nadie ha entrado. */
+  lastScanAt?: string;
 }
 
 export interface BoxOfficeStats {
@@ -168,6 +186,14 @@ export function toPublicEvent(event: Event): PublicEvent {
 
 export function toAdminEventSummary(event: Event): AdminEventSummary {
   const approved = event.tickets.filter((ticket) => ticket.paymentStatus === "approved");
+  const live = event.tickets.filter((ticket) => ticket.status !== "voided");
+  const { inside, outside, entries } = occupancy(event);
+  const lastScanAt = live
+    .map((ticket) => ticket.lastScanAt)
+    .filter((at): at is string => Boolean(at))
+    .sort()
+    .pop();
+
   return {
     id: event.id,
     name: event.name,
@@ -179,6 +205,14 @@ export function toAdminEventSummary(event: Event): AdminEventSummary {
     sold: totalSold(event),
     capacity: totalCapacity(event),
     revenue: approved.reduce((sum, ticket) => sum + ticket.pricePaid, 0),
+    remaining: remainingSeats(event),
+    inside,
+    outside,
+    attended: live.filter((ticket) => ticket.entryCount > 0).length,
+    neverEntered: live.filter((ticket) => ticket.entryCount === 0).length,
+    entries,
+    voided: event.tickets.filter((ticket) => ticket.status === "voided").length,
+    lastScanAt,
   };
 }
 
