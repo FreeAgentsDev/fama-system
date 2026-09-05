@@ -2,13 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { FamaLogo } from "@/components/brand/fama-logo";
+import { FAMA, GALERIA, fullAddress, instagramUrl, whatsappUrl } from "@/lib/fama";
 
+/**
+ * Los enlaces se calculan de los datos, no se escriben a mano: "Galería" y "Visítanos" sólo
+ * se renderizan si esas secciones existen. Un ancla que no lleva a ninguna parte es peor que
+ * no tener el enlace.
+ */
 const LINKS = [
-  { href: "#fechas", label: "Fechas" },
-  { href: "#la-casa", label: "La casa" },
-  { href: "#galeria", label: "Galería" },
-  { href: "#visitanos", label: "Visítanos" },
-];
+  { href: "#fechas", label: "Fechas", visible: true },
+  { href: "#la-casa", label: "La casa", visible: true },
+  { href: "#galeria", label: "Galería", visible: GALERIA.length > 0 },
+  {
+    href: "#visitanos",
+    label: "Visítanos",
+    visible: Boolean(fullAddress() || FAMA.hours.length || instagramUrl() || whatsappUrl()),
+  },
+].filter((link) => link.visible);
 
 /**
  * Barra fija del portal. Arranca transparente sobre el hero y se opaca al bajar, para que

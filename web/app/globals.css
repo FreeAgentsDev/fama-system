@@ -40,7 +40,14 @@ button {
   font: inherit;
 }
 
-/* Fondo nocturno: foto, neones y grilla del lounge */
+/* --------------------------------------------------------------------------
+   Fondo nocturno, 100% CSS.
+   Antes esto era una foto del lounge (`/brand/fama-lounge.png`), pero ese
+   archivo mide 284x160 px: estirado a pantalla completa se veía pixelado a
+   7 aumentos. Un degradado no tiene resolución, así que se ve nítido en
+   cualquier pantalla, pesa cero y carga al instante.
+   Los pozos de neón y la grilla en fuga imitan un piso de club de los 80.
+   -------------------------------------------------------------------------- */
 .fama-atmosphere {
   position: relative;
   isolation: isolate;
@@ -48,16 +55,21 @@ button {
   background: #07070b;
 }
 
+/* Capa 1: pozos de luz de neón sobre la base oscura. */
 .fama-atmosphere::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -2;
   background:
-    linear-gradient(180deg, rgba(7, 7, 11, 0.35) 0%, rgba(7, 7, 11, 0.78) 48%, #07070b 100%),
-    url("/brand/fama-lounge.png") center / cover no-repeat;
+    radial-gradient(ellipse 85% 55% at 12% 8%, rgba(77, 184, 255, 0.22), transparent 62%),
+    radial-gradient(ellipse 70% 50% at 88% 2%, rgba(155, 107, 255, 0.26), transparent 58%),
+    radial-gradient(ellipse 75% 40% at 50% 105%, rgba(232, 184, 74, 0.12), transparent 62%),
+    radial-gradient(ellipse 50% 35% at 78% 72%, rgba(255, 92, 168, 0.10), transparent 55%),
+    linear-gradient(180deg, #100c1e 0%, #0a0813 45%, #07070b 100%);
 }
 
+/* Capa 2: grilla que se cierra hacia el horizonte + viñeta. */
 .fama-atmosphere::after {
   content: "";
   pointer-events: none;
@@ -65,24 +77,27 @@ button {
   inset: 0;
   z-index: -1;
   background-image:
-    radial-gradient(ellipse 70% 50% at 12% 18%, rgba(77, 184, 255, 0.18), transparent 60%),
-    radial-gradient(ellipse 55% 45% at 88% 8%, rgba(155, 107, 255, 0.22), transparent 55%),
-    radial-gradient(ellipse 40% 30% at 78% 78%, rgba(232, 184, 74, 0.08), transparent 50%),
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(155, 107, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(77, 184, 255, 0.07) 1px, transparent 1px),
+    radial-gradient(ellipse 100% 80% at 50% 50%, transparent 45%, rgba(0, 0, 0, 0.55) 100%);
   background-size:
-    auto,
-    auto,
-    auto,
-    48px 48px,
-    48px 48px;
+    64px 64px,
+    64px 64px,
+    auto;
+  /* La grilla se desvanece hacia arriba: da sensación de piso, no de papel milimetrado. */
+  mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.5) 45%, #000 100%);
 }
 
-.fama-atmosphere-plain::before {
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(77, 184, 255, 0.12), transparent 50%),
-    #07070b;
+/* Variante sin grilla, para pantallas de formulario y estados vacíos. */
+.fama-atmosphere-plain::after {
+  background-image: radial-gradient(
+    ellipse 100% 80% at 50% 50%,
+    transparent 45%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
+  mask-image: none;
 }
+
 
 .fama-card {
   border: 1px solid rgba(255, 255, 255, 0.1);

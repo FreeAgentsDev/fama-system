@@ -56,15 +56,12 @@ export const FAMA: FamaVenue = {
  * Fotos de la galería. Para agregar más: suelta los archivos en `web/public/galeria/` y
  * añádelos acá. Si la lista queda vacía, la sección de galería no se muestra.
  *
- * Arranca con material real de Fama que ya estaba en el repo: la foto del lounge y los
- * flyers de las tres noches.
+ * **Hoy está vacía a propósito**, así que la sección no aparece. Poner acá los flyers sería
+ * repetir la cartelera, y la única foto del local que hay (`/brand/fama-lounge.png`) mide
+ * 284x160 px: en una celda del mosaico se ve destrozada. Esto se enciende solo en cuanto
+ * Daniel pase fotos reales del lugar.
  */
-export const GALERIA: { src: string; alt: string }[] = [
-  { src: "/brand/fama-lounge.png", alt: "El lounge de Fama en una noche" },
-  { src: "/eventos/precupido.png", alt: "Flyer de la noche Precupido" },
-  { src: "/eventos/love-house.png", alt: "Flyer de Love House Session" },
-  { src: "/eventos/girls-power.png", alt: "Flyer de Girls Power" },
-];
+export const GALERIA: { src: string; alt: string }[] = [];
 
 /** La frase de la casa, de la propuesta. */
 export const FAMA_TAGLINE = "Tragos con alma, noches con historia.";

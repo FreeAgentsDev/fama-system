@@ -17,6 +17,8 @@ export function Visitanos() {
   if (!direccion && !tieneHorarios && !instagram && !whatsapp) return null;
 
   return (
+    <>
+      <hr className="fama-rule" />
     <section id="visitanos" className="scroll-mt-24 py-20">
       <p className="fama-kicker">Visítanos</p>
       <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
@@ -74,5 +76,6 @@ export function Visitanos() {
         )}
       </div>
     </section>
+    </>
   );
 }

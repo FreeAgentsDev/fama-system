@@ -5,8 +5,16 @@ import { LaCasa } from "@/components/public/la-casa";
 import { SiteFooter } from "@/components/public/site-footer";
 import { SiteNav } from "@/components/public/site-nav";
 import { Visitanos } from "@/components/public/visitanos";
+import { Flyer } from "@/components/public/flyer";
 import { listPublishedEvents, type PublicEvent } from "@/lib/api";
 import { FAMA } from "@/lib/fama";
+import {
+  capitalize,
+  formatDayNumber,
+  formatEventDate,
+  formatEventTime,
+  formatMonthShort,
+} from "@/lib/format";
 
 // Sin `revalidate`: lib/api.ts hace los fetch con cache: "no-store", lo que fuerza
 // render dinámico y deja sin efecto cualquier ventana de ISR. La cartelera se pide
@@ -21,20 +29,6 @@ const currency = new Intl.NumberFormat("es-CO", {
   maximumFractionDigits: 0,
 });
 
-const dateFormatter = new Intl.DateTimeFormat("es-CO", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-});
-
-const timeFormatter = new Intl.DateTimeFormat("es-CO", {
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-const dayFormatter = new Intl.DateTimeFormat("es-CO", { day: "numeric" });
-const monthFormatter = new Intl.DateTimeFormat("es-CO", { month: "short" });
-
 function EventCard({ event }: { event: PublicEvent }) {
   const soldOut = event.status === "sold-out" || !event.currentStage;
   const quedanPocas = !soldOut && event.remaining > 0 && event.remaining <= POCAS_BOLETAS;
@@ -45,24 +39,19 @@ function EventCard({ event }: { event: PublicEvent }) {
       href={`/${event.slug}`}
       className="fama-card group block overflow-hidden transition duration-300 hover:-translate-y-1 hover:border-white/25"
     >
-      <div className="fama-scan relative h-52 overflow-hidden">
-        {event.coverImageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- flyer de URL externa
-          <img
-            src={event.coverImageUrl}
-            alt=""
-            className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
-          />
-        ) : (
-          <div className="h-full w-full bg-[url('/brand/fama-lounge.png')] bg-cover bg-center" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+      <div className="relative">
+        {/* 3:4 es la proporción de los flyers que sube Daniel, así que el desenfoque de
+            relleno casi no se ve y el cartel se lee completo. */}
+        <Flyer src={event.coverImageUrl} alt={event.name} className="aspect-[3/4] w-full" />
+
+        {/* Sombra sólo abajo: las etiquetas necesitan contraste, el cartel no. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/85 to-transparent" />
 
         {/* Taco de fecha: se lee de un vistazo al hacer scroll. */}
-        <div className="absolute left-3 top-3 rounded-xl border border-white/15 bg-black/55 px-3 py-1.5 text-center backdrop-blur">
-          <p className="text-lg font-semibold leading-none">{dayFormatter.format(fecha)}</p>
+        <div className="absolute left-3 top-3 rounded-xl border border-white/15 bg-black/60 px-3 py-1.5 text-center backdrop-blur">
+          <p className="text-lg font-semibold leading-none">{formatDayNumber(fecha)}</p>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-white/60">
-            {monthFormatter.format(fecha).replace(".", "")}
+            {formatMonthShort(fecha)}
           </p>
         </div>
 
@@ -75,8 +64,8 @@ function EventCard({ event }: { event: PublicEvent }) {
 
       <div className="p-5">
         <h3 className="text-xl font-semibold tracking-tight">{event.name}</h3>
-        <p className="mt-1 text-sm capitalize text-white/55">
-          {dateFormatter.format(fecha)} · {timeFormatter.format(fecha)}
+        <p className="mt-1 text-sm text-white/55">
+          {capitalize(formatEventDate(fecha))} · {formatEventTime(fecha)}
         </p>
         <div className="mt-4 flex items-baseline justify-between gap-3">
           <p className="text-lg font-semibold text-[#e8b84a]">
@@ -142,9 +131,7 @@ export default async function HomePage() {
             >
               <span className="fama-kicker">Sigue</span>
               <span className="font-medium">{proxima.name}</span>
-              <span className="capitalize text-white/45">
-                {dateFormatter.format(new Date(proxima.date))}
-              </span>
+              <span className="text-white/45">{capitalize(formatEventDate(proxima.date))}</span>
             </Link>
           )}
         </section>
@@ -182,9 +169,9 @@ export default async function HomePage() {
 
         <hr className="fama-rule" />
         <LaCasa />
-        <hr className="fama-rule" />
+        {/* Galería y Visítanos traen su propia regla: si no hay datos no se renderizan, y
+            así tampoco dejan un separador suelto. */}
         <Galeria />
-        <hr className="fama-rule" />
         <Visitanos />
       </main>
 

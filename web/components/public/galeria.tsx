@@ -8,6 +8,8 @@ export function Galeria() {
   if (GALERIA.length === 0) return null;
 
   return (
+    <>
+      <hr className="fama-rule" />
     <section id="galeria" className="scroll-mt-24 py-20">
       <p className="fama-kicker">Galería</p>
       <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Así se ve una noche</h2>
@@ -32,5 +34,6 @@ export function Galeria() {
         ))}
       </div>
     </section>
+    </>
   );
 }

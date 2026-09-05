@@ -4,6 +4,8 @@ import { PublicHeader } from "@/components/brand/public-header";
 import { WompiCheckoutButton } from "@/components/wompi-checkout-button";
 import { getEventBySlug } from "@/lib/api";
 import { SiteFooter } from "@/components/public/site-footer";
+import { Flyer } from "@/components/public/flyer";
+import { capitalize, formatEventDate, formatEventTime } from "@/lib/format";
 import { fullAddress, mapsUrl } from "@/lib/fama";
 
 // Sin `revalidate`: los fetch de lib/api.ts usan cache: "no-store", que fuerza render
@@ -14,22 +16,6 @@ const currency = new Intl.NumberFormat("es-CO", {
   currency: "COP",
   maximumFractionDigits: 0,
 });
-
-const dateFormatter = new Intl.DateTimeFormat("es-CO", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-});
-
-const timeFormatter = new Intl.DateTimeFormat("es-CO", {
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-});
-
-function capitalize(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
 
 function isInThePast(iso: string): boolean {
   return new Date(iso).getTime() < Date.now();
@@ -96,24 +82,20 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
       <div className="mx-auto max-w-lg px-4 pb-16">
         <PublicHeader />
 
-        <div className="fama-scan relative overflow-hidden rounded-[1.6rem] border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
-          {event.coverImageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- flyer viene de una URL externa arbitraria que sube Daniel
-            <img src={event.coverImageUrl} alt={event.name} className="h-72 w-full object-cover" />
-          ) : (
-            <div className="flex h-64 w-full items-end bg-[url('/brand/fama-lounge.png')] bg-cover bg-center">
-              <div className="w-full bg-gradient-to-t from-black/80 to-transparent p-6">
-                <span className="fama-logo text-5xl">Fama</span>
-              </div>
-            </div>
-          )}
-        </div>
+        {/* El cartel completo, sin recortar: es la pieza que Daniel diseñó y por la que
+            la gente entra desde Instagram. */}
+        <Flyer
+          src={event.coverImageUrl}
+          alt={event.name}
+          priority
+          className="aspect-[3/4] w-full rounded-[1.6rem] border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.45)]"
+        />
 
         <div className="mt-7">
           <p className="fama-kicker">{event.venue}</p>
           <h1 className="mt-2 text-4xl font-semibold tracking-tight">{event.name}</h1>
           <p className="mt-2 text-white/60">
-            {capitalize(dateFormatter.format(eventDate))} · {timeFormatter.format(eventDate)}
+            {capitalize(formatEventDate(eventDate))} · {formatEventTime(eventDate)}
           </p>
           {/* Quien va a pagar necesita saber dónde queda. Sale de lib/fama.ts, y si no hay
               dirección puesta simplemente no se muestra. */}
