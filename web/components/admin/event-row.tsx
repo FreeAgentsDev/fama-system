@@ -3,17 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatDateTime } from "@/lib/format";
 import type { AdminEventSummary } from "@/lib/admin-types";
 
 const currency = new Intl.NumberFormat("es-CO", {
   style: "currency",
   currency: "COP",
   maximumFractionDigits: 0,
-});
-
-const dateFormatter = new Intl.DateTimeFormat("es-CO", {
-  dateStyle: "medium",
-  timeStyle: "short",
 });
 
 const STATUS_LABEL: Record<AdminEventSummary["status"], string> = {
@@ -54,7 +50,7 @@ export function EventRow({ event }: { event: AdminEventSummary }) {
         </Link>
         <div className="text-xs text-white/40">{event.venue}</div>
       </td>
-      <td className="text-white/70">{dateFormatter.format(new Date(event.date))}</td>
+      <td className="text-white/70">{formatDateTime(event.date)}</td>
       <td className="text-white/70">{event.currentStageName ?? "—"}</td>
       <td className="text-white/70">
         {event.sold}/{event.capacity}
@@ -69,6 +65,12 @@ export function EventRow({ event }: { event: AdminEventSummary }) {
         <div className="flex justify-end gap-2">
           <Link href={`/admin/eventos/${event.id}`} className="fama-btn-ghost px-3 py-1 text-xs">
             Detalle
+          </Link>
+          <Link
+            href={`/admin/eventos/${event.id}/editar`}
+            className="fama-btn-ghost px-3 py-1 text-xs"
+          >
+            Editar
           </Link>
           <button
             type="button"

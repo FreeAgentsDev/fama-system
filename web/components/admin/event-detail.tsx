@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import Link from "next/link";
 import { adminErrorMessage } from "@/lib/admin-errors";
 import type { AdminTicket, BoxOfficeSnapshot } from "@/lib/admin-types";
 import { useAdminStream, type DomainStreamEvent } from "@/lib/use-admin-stream";
@@ -274,12 +273,7 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
   return (
     <div>
       <p className="fama-kicker">{snapshot.event.venue}</p>
-      <div className="mt-2 mb-8 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-semibold tracking-tight">{snapshot.event.name}</h1>
-        <Link href={`/admin/eventos/${eventId}/editar`} className="fama-btn-ghost text-xs">
-          Editar evento
-        </Link>
-      </div>
+      <h1 className="mt-2 mb-8 text-3xl font-semibold tracking-tight">{snapshot.event.name}</h1>
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <div>
