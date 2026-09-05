@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { PublicHeader } from "@/components/brand/public-header";
 import { WompiCheckoutButton } from "@/components/wompi-checkout-button";
 import { getEventBySlug } from "@/lib/api";
+import { SiteFooter } from "@/components/public/site-footer";
+import { fullAddress, mapsUrl } from "@/lib/fama";
 
 // Sin `revalidate`: los fetch de lib/api.ts usan cache: "no-store", que fuerza render
 // dinámico y deja la ventana de ISR sin efecto. El cupo restante debe ir al día.
@@ -86,13 +88,15 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
   const isHidden = event.status === "cancelled";
   const stage = event.currentStage;
   const stageRemaining = stage ? stage.capacity - stage.soldCount : 0;
+  const direccion = fullAddress();
+  const mapa = mapsUrl();
 
   return (
     <div className="fama-atmosphere min-h-screen">
       <div className="mx-auto max-w-lg px-4 pb-16">
         <PublicHeader />
 
-        <div className="overflow-hidden rounded-[1.6rem] border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
+        <div className="fama-scan relative overflow-hidden rounded-[1.6rem] border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
           {event.coverImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- flyer viene de una URL externa arbitraria que sube Daniel
             <img src={event.coverImageUrl} alt={event.name} className="h-72 w-full object-cover" />
@@ -111,6 +115,19 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
           <p className="mt-2 text-white/60">
             {capitalize(dateFormatter.format(eventDate))} · {timeFormatter.format(eventDate)}
           </p>
+          {/* Quien va a pagar necesita saber dónde queda. Sale de lib/fama.ts, y si no hay
+              dirección puesta simplemente no se muestra. */}
+          {direccion && (
+            <p className="mt-1 text-sm text-white/45">
+              {mapa ? (
+                <a href={mapa} target="_blank" rel="noopener noreferrer" className="underline-offset-4 hover:underline">
+                  {direccion}
+                </a>
+              ) : (
+                direccion
+              )}
+            </p>
+          )}
         </div>
 
         <div className="fama-card mt-7 p-6">
@@ -128,7 +145,13 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
                 <span className="ml-2 text-base font-normal text-white/45">por persona</span>
               </p>
               {stageRemaining > 0 && stageRemaining <= 20 && (
-                <p className="mt-2 text-sm text-[#e8b84a]">Quedan {stageRemaining} boletas a este precio</p>
+                <p
+                  className={`mt-2 text-sm ${stageRemaining <= 5 ? "font-semibold text-[#ffb4b4]" : "text-[#e8b84a]"}`}
+                >
+                  {stageRemaining <= 5
+                    ? `¡Últimas ${stageRemaining} a este precio!`
+                    : `Quedan ${stageRemaining} boletas a este precio`}
+                </p>
               )}
               <div className="mt-6">
                 <WompiCheckoutButton eventId={event.id} eventSlug={event.slug} />
@@ -147,6 +170,8 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
         </div>
         <p className="mt-5 text-center text-xs text-white/40">Sin cargos de servicio. El pago va directo a Fama.</p>
       </div>
+
+      <SiteFooter />
     </div>
   );
 }

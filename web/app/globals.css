@@ -213,3 +213,83 @@ button {
 .fama-table tbody tr:hover td {
   background: rgba(255, 255, 255, 0.025);
 }
+
+/* --------------------------------------------------------------------------
+   Capa retro-80s. Fama es un bar temático de los 80 (televisores de tubo
+   apilados, neón, disco): estas piezas le dan esa voz al sitio sin caer en la
+   caricatura synthwave — sigue siendo un lounge, no un rave.
+   -------------------------------------------------------------------------- */
+
+/* Texto con halo de neón. Para titulares cortos, no para párrafos. */
+.fama-neon {
+  color: #fff;
+  text-shadow:
+    0 0 8px rgba(77, 184, 255, 0.55),
+    0 0 26px rgba(155, 107, 255, 0.4),
+    0 6px 22px rgba(0, 0, 0, 0.5);
+}
+
+/* Líneas de barrido de televisor viejo. Va sobre imágenes, muy sutil. */
+.fama-scan::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.035) 0px,
+    rgba(255, 255, 255, 0.035) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: overlay;
+}
+
+/* Píldora para géneros musicales y etiquetas cortas. */
+.fama-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.35rem 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 550;
+  color: rgba(246, 243, 238, 0.82);
+}
+
+/* Regla degradada para cerrar secciones sin meter otro borde plano. */
+.fama-rule {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(232, 184, 74, 0.45),
+    rgba(155, 107, 255, 0.35),
+    transparent
+  );
+}
+
+/* Aviso de urgencia en las tarjetas de la cartelera (quedan pocas boletas). */
+.fama-urgente {
+  color: #ffb4b4;
+  border-color: rgba(255, 120, 120, 0.35);
+  background: rgba(255, 80, 80, 0.12);
+}
+
+/* Barra fija de compra en móvil. Se esconde en escritorio, donde el botón ya se ve. */
+.fama-sticky-buy {
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(7, 7, 11, 0.92);
+  backdrop-filter: blur(18px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fama-btn:hover {
+    transform: none;
+  }
+}

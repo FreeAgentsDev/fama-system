@@ -1,14 +1,14 @@
-import { FAMA, FAMA_TAGLINE } from "@/lib/fama";
+import { FAMA } from "@/lib/fama";
 
 /**
- * Nada de esta sección está inventado: sale de la propuesta — Fama es "una casa en Milán:
- * puerta, barra y cocina", y su voz es "Tragos con alma, noches con historia". No se afirma
- * nada que no esté confirmado por el cliente (ni años, ni aforo, ni premios).
+ * Nada de esta sección es inventado. El concepto (bar de los 80, retro-moderno, coctelería
+ * de autor y hamburguesas artesanales) y los géneros salen de la ficha pública del lugar;
+ * "puerta, barra y cocina" sale de la propuesta. No se afirma antigüedad, aforo ni premios.
  */
 const PILARES = [
   {
     titulo: "Puerta",
-    texto: "Aparta desde el celular y entra con tu QR. Sin filas, sin listas en papel.",
+    texto: "Apartas desde el celular y entras con tu QR. Sin filas y sin listas en papel.",
   },
   {
     titulo: "Barra",
@@ -16,24 +16,38 @@ const PILARES = [
   },
   {
     titulo: "Cocina",
-    texto: "Para que la noche aguante. Se come bien y se sigue.",
+    texto: "Hamburguesas artesanales para que la noche aguante hasta el final.",
   },
 ];
 
 export function LaCasa() {
   return (
     <section id="la-casa" className="scroll-mt-24 py-20">
-      <div className="grid gap-10 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:gap-14">
+      <div className="grid gap-12 lg:grid-cols-[1.15fr_1fr] lg:items-start lg:gap-16">
         <div>
           <p className="fama-kicker">La casa</p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-            Una casa en {FAMA.neighborhood}
+          <h2 className="fama-neon mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+            Los 80 siguen sonando en {FAMA.neighborhood || FAMA.city}
           </h2>
-          <p className="mt-5 text-lg leading-relaxed text-white/70">
-            Fama no es un evento suelto. Es un lounge en {FAMA.city}: neón, sonido y noches
-            que se arman de verdad.
-          </p>
-          <p className="fama-logo mt-8 text-3xl sm:text-4xl">{FAMA_TAGLINE}</p>
+
+          <p className="mt-5 text-lg leading-relaxed text-white/70">{FAMA.concept}</p>
+
+          {FAMA.music.length > 0 && (
+            <>
+              <p className="mt-8 text-xs font-semibold uppercase tracking-[0.2em] text-white/40">
+                Lo que suena
+              </p>
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {FAMA.music.map((genero) => (
+                  <li key={genero} className="fama-chip">
+                    {genero}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          <p className="fama-logo mt-10 text-3xl sm:text-4xl">Tragos con alma, noches con historia.</p>
         </div>
 
         <ul className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">

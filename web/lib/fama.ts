@@ -15,6 +15,10 @@ export interface FamaVenue {
   address: string;
   neighborhood: string;
   city: string;
+  /** Cómo se describe la casa. Sale de la ficha pública del lugar. */
+  concept: string;
+  /** Géneros que suenan, para la sección de la casa. */
+  music: string[];
   /** Usuario de Instagram SIN la arroba. Ej: "famamzl". */
   instagram: string;
   /** Solo dígitos, con indicativo país y sin "+". Ej: "573001234567". */
@@ -26,13 +30,26 @@ export interface FamaVenue {
 }
 
 export const FAMA: FamaVenue = {
-  address: "",
-  neighborhood: "Milán",
+  // Dirección: la bio de instagram.com/fama_mzl dice "CRA 23 # 72 - 118 / Piso 2" y la ficha
+  // pública del lugar la da como "Avenida Santander # 72-118, piso 2, entrada a Milán".
+  // En Manizales la Carrera 23 ES la Avenida Santander, así que ambas coinciden — y eso
+  // confirma el "casa en Milán" de la propuesta.
+  address: "Av. Santander # 72-118, piso 2",
+  neighborhood: "Entrada a Milán",
   city: "Manizales",
-  instagram: "",
+
+  // El concepto sale de la ficha pública del lugar: bar temático de los 80, retro-moderno.
+  // Encaja con la foto del lounge, que tiene televisores de tubo apilados.
+  concept: "Bar de los 80 en clave retro-moderna: coctelería de autor, hamburguesas artesanales y música que atraviesa décadas.",
+  music: ["Rock en español", "House", "Disco", "Pop"],
+
+  instagram: "fama_mzl",
+  // Sin publicar en ninguna fuente. Pídeselo a Daniel.
   whatsapp: "",
   mapsUrl: "",
-  hours: [],
+
+  // ⚠️ De la ficha pública, NO confirmados con Daniel. Verifícalos antes del lunes.
+  hours: [{ days: "Viernes y sábado", time: "7:00 p. m. – 3:00 a. m." }],
 };
 
 /**
