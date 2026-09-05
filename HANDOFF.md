@@ -65,41 +65,67 @@ agrega `id=<transaction_id>` a la URL de redirección. La página de la boleta p
 la transacción contra la API pública de Wompi y confirmar sin depender del webhook. Eso haría
 que el flujo funcione incluso en local.
 
-## Runbook de deploy (pendiente, necesita las cuentas de Miguel)
+## Deploy — HECHO (5 sep). Falta un paso en el dashboard de Wompi
 
-**Dominio de la demo: `fama.freeagentsdev.com`** (provisional, hasta que Daniel pague uno
-propio). Ya resuelve a Vercel. Verificado que el WAF de Wompi lo acepta (200), así que sirve
-tanto de `redirect-url` como de destino del webhook.
+| Pieza | Dónde | Estado |
+|---|---|---|
+| `web/` | Vercel → **https://fama.freeagentsdev.com** | ✅ vivo (Root Directory = `web`) |
+| `server/` | Render free → **https://fama-system.onrender.com** | ✅ vivo (Root Directory = `server`, Docker) |
+| Datos | `Map` en memoria | ⚠️ se pierden en cada spin-down |
 
-**Estado medido el 5 sep:** `https://fama.freeagentsdev.com/` devuelve el **404 de plataforma
-de Vercel** (`NOT_FOUND`, no el 404 de Next.js) — o sea, el Root Directory sigue sin corregir.
+Verificado el 5 sep, en producción: home, `/girls-power` y `/admin/*` responden 200; el
+webhook devuelve **401 "invalid signature"** ante un POST sin firma (si le faltaran variables
+daría 500, así que están bien puestas); y el modal de Wompi abre en el dominio real con
+`redirect-url=https://fama.freeagentsdev.com/...`, la firma de integridad presente y el monto
+correcto. Datos de demo sembrados.
 
-**Ojo primero:** `master` está sincronizado con `origin`, pero **todo el trabajo del 5 sep
-sigue sin commitear**. Lo que hay desplegado no tiene ninguno de los arreglos del pago. Hay
-que commitear y pushear antes de que el deploy sirva de algo.
+**Paso que falta:** registrar la URL de eventos en el dashboard de Wompi →
+`https://fama.freeagentsdev.com/api/wompi/webhook`. Sin esto el pago se cobra pero el ticket
+se queda en `pending` y la boleta muestra "Confirmando tu pago" para siempre.
 
-1. `server/` → Railway. Ya hay `server/Dockerfile`. Variables: las de `server/.env.example`
-   (incluidas las 4 de Wompi y `WEB_URL=https://fama.freeagentsdev.com`).
-2. `web/` → Vercel. El 404 es porque es un monorepo sin `package.json` en la raíz:
-   **Settings → General → Root Directory = `web`**.
-3. Variables en Vercel (Settings → Environment Variables): `IRACA_URL` y
-   `NEXT_PUBLIC_IRACA_URL` con la URL pública de Railway (ya no `localhost:2436`),
-   `NEXT_PUBLIC_PUBLIC_URL=https://fama.freeagentsdev.com`, `NEXT_PUBLIC_WOMPI_KEY`,
-   `WOMPI_EVENTS_SECRET`, `INTERNAL_WEBHOOK_SECRET` (idéntico al del server),
-   `FAMA_ADMIN_PIN`, `ADMIN_SESSION_SECRET`.
-4. En el dashboard de Wompi, registrar la URL de eventos:
-   `https://fama.freeagentsdev.com/api/wompi/webhook`.
+### Notas del deploy que cuesta re-descubrir
 
-Sin el paso 1 (Railway) el sitio despliega pero no muestra eventos: `web` le pega a `IRACA_URL`
-para todo.
+- **Iraca no lee `process.env.PORT`.** El puerto salía fijo de `iraca.config.json`, y el
+  runner le da prioridad al del JSON sobre el que se le pasa a `runIraca`
+  (`if (portInIraca) port = Number(portInIraca)`). Por eso ese campo se sacó del JSON y el
+  valor se resuelve en `src/index.ts` con 2436 de respaldo. Render asignó el 10000.
+- **`pnpm start` usa `--transpile-only`.** En la instancia free (0.1 CPU, 512 MB) el
+  type-check en cada arranque hacía el cold start eterno. Los tipos se siguen verificando en
+  `pnpm test`, `tsc --noEmit` y `pnpm dev`.
+- **`IRACA_URL` en el server no sirve para nada** — sólo la lee `seed-demo.ts`, que corre en
+  la máquina de Miguel. En Vercel sí es necesaria (Next le pega al server desde el servidor).
+- **Sembrar producción** desde local:
+  ```bash
+  cd server && IRACA_URL=https://fama-system.onrender.com \
+    INTERNAL_WEBHOOK_SECRET=<el de Render> pnpm seed
+  ```
+- **`INTERNAL_WEBHOOK_SECRET` tiene que ser idéntico en Render y en Vercel**, o el server
+  rechaza todos los pagos por "internalSecret inválido".
+- Al importar el `.env` en Vercel, las variables que ya existían **se saltan, no se
+  actualizan** — hay que sobrescribirlas a mano.
+
+### Riesgo abierto para el lunes: Render free se duerme
+
+La instancia free se apaga a los 15 min sin tráfico y el primer request después tarda ~50 s.
+Como el store es un `Map` en memoria, **cada spin-down borra eventos, ventas y boletas**.
+
+Dos cosas que lo resuelven, en orden de valor:
+
+1. **Firestore** (Spark, gratis). `FirestoreEventContract` ya está implementado; sólo le
+   faltan `FIREBASE_PROJECT_ID` / `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY` en Render.
+   Cierra también el pendiente heredado de "los datos se pierden al reiniciar".
+2. Mientras tanto: abrir la URL ~2 min antes de la demo (para el cold start) y re-sembrar si
+   hizo falta.
 
 ## Qué es esto
 
 Boletería virtual para **Fama MZL** (discoteca en Manizales), cliente **Daniel**.
 
-- `server/` — backend Iraca (Node/TypeScript) + Firestore → Railway (**todavía no desplegado**)
+- `server/` — backend Iraca (Node/TypeScript) + Firestore → **Render free**, en
+  https://fama-system.onrender.com (Railway se descartó: ya no tiene capa gratis real —
+  trial de $5 por 30 días y después $1/mes de crédito, que no sostiene nada prendido)
 - `web/` — frontend Next.js 16: público, admin y scanner de puerta → Vercel, en
-  `fama.freeagentsdev.com` (**sigue dando el 404 de plataforma** — ver el runbook de deploy)
+  **https://fama.freeagentsdev.com** (dominio provisional hasta que Daniel pague uno propio)
 
 **Alcance contratado:** la propuesta (github.com/m1gue21/fama-propuesta, `docs/PROPUESTA-DANIEL.md`,
 pública) tiene 3 piezas acumulativas. Daniel eligió la **pieza 2 "La boleta": $2.500.000 de
@@ -263,7 +289,6 @@ lo que decía el handoff anterior.
   (`app/api/wompi/webhook/route.ts`) es lo más crítico sin cubrir.
 - **La promesa de "Nequi/Bre-B sin cargo de pasarela"** de la propuesta sigue sin cumplirse:
   hoy se cobra la comisión a todos por igual. Pendiente de decidir con Daniel.
-- Desplegar `server/` a Railway — sigue sin hacerse.
 
 ## Cosas que ya están bien (no romper)
 
