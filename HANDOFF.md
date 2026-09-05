@@ -71,7 +71,7 @@ que el flujo funcione incluso en local.
 |---|---|---|
 | `web/` | Vercel → **https://fama.freeagentsdev.com** | ✅ vivo (Root Directory = `web`) |
 | `server/` | Render free → **https://fama-system.onrender.com** | ✅ vivo (Root Directory = `server`, Docker) |
-| Datos | `Map` en memoria | ⚠️ se pierden en cada spin-down |
+| Datos | **Firestore** (Spark, gratis) | ✅ persisten entre spin-downs |
 
 Verificado el 5 sep, en producción: home, `/girls-power` y `/admin/*` responden 200; el
 webhook devuelve **401 "invalid signature"** ante un POST sin firma (si le faltaran variables
@@ -79,9 +79,19 @@ daría 500, así que están bien puestas); y el modal de Wompi abre en el domini
 `redirect-url=https://fama.freeagentsdev.com/...`, la firma de integridad presente y el monto
 correcto. Datos de demo sembrados.
 
-**Paso que falta:** registrar la URL de eventos en el dashboard de Wompi →
-`https://fama.freeagentsdev.com/api/wompi/webhook`. Sin esto el pago se cobra pero el ticket
-se queda en `pending` y la boleta muestra "Confirmando tu pago" para siempre.
+**Webhook registrado y verificado de punta a punta** (5 sep). Se reservó una boleta, se mandó
+un evento `transaction.updated` **con firma válida** a
+`https://fama.freeagentsdev.com/api/wompi/webhook`, y el resultado fue: `200 {"ok":true}` →
+ticket `approved` en Firestore con el `paymentRef` actualizado → la página de la boleta
+renderiza el QR. Eso prueba de una sola pasada la firma de eventos, que Vercel alcanza a
+Render, que el `INTERNAL_WEBHOOK_SECRET` coincide en ambos, y que confirm-payment escribe a
+Firestore.
+
+Ojo: fue un evento **simulado**, no una tarjeta real pasando por el checkout de Wompi. La
+plomería está probada; falta hacer una compra real de sandbox al menos una vez.
+
+Quedó un ticket de prueba a nombre de **"Prueba Webhook"** en Girls Power. Se puede anular
+desde el panel (botón "Anular") si estorba en la demo.
 
 ### Notas del deploy que cuesta re-descubrir
 
@@ -104,18 +114,28 @@ se queda en `pending` y la boleta muestra "Confirmando tu pago" para siempre.
 - Al importar el `.env` en Vercel, las variables que ya existían **se saltan, no se
   actualizan** — hay que sobrescribirlas a mano.
 
-### Riesgo abierto para el lunes: Render free se duerme
+### Firestore — conectado (5 sep)
 
-La instancia free se apaga a los 15 min sin tráfico y el primer request después tarda ~50 s.
-Como el store es un `Map` en memoria, **cada spin-down borra eventos, ventas y boletas**.
+Proyecto `fama-system`, colección `events`. Las 3 variables (`FIREBASE_PROJECT_ID`,
+`FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`) están en Render. La llave privada va en una
+sola línea con los `\n` literales, tal como viene en el JSON de la cuenta de servicio — el
+cliente hace `privateKey.replace(/\\n/g, "\n")`.
 
-Dos cosas que lo resuelven, en orden de valor:
+Verificado consultando Firestore directamente, no por los logs: los 3 eventos están ahí con
+sus tickets. **Ya no hay que re-sembrar**; el seed se corre una sola vez.
 
-1. **Firestore** (Spark, gratis). `FirestoreEventContract` ya está implementado; sólo le
-   faltan `FIREBASE_PROJECT_ID` / `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY` en Render.
-   Cierra también el pendiente heredado de "los datos se pierden al reiniciar".
-2. Mientras tanto: abrir la URL ~2 min antes de la demo (para el cold start) y re-sembrar si
-   hizo falta.
+**El seed no es idempotente**: correrlo otra vez contra una base que ya tiene los eventos
+crearía duplicados. Sólo se corre contra una base vacía.
+
+Lo único que queda del spin-down es el **cold start de ~50 s** en el primer request después
+de 15 min sin tráfico. Para la demo: abrir la URL un par de minutos antes.
+
+### Pendiente de seguridad
+
+La llave de servicio de Firebase que está hoy en Render quedó expuesta en una captura de
+pantalla durante la sesión. Hay que **rotarla**: Configuración del proyecto → Cuentas de
+servicio → generar una nueva, actualizar las 3 variables en Render, y borrar la vieja desde
+Google Cloud Console.
 
 ## Qué es esto
 
@@ -283,8 +303,6 @@ lo que decía el handoff anterior.
   espera, no es prioridad para el lunes.
 - **`Bold`** aparece en la propuesta pero no está implementado — ya resuelto conceptualmente
   (Wompi solo cumple la promesa, era un "o"), no hace falta construirlo.
-- **Firestore** sin credenciales — datos en memoria, se pierden al reiniciar. No bloquea la
-  demo si no se reinicia el server a mitad de la demo.
 - **No hay tests en `web/`**, solo en `server/`. El webhook de Wompi
   (`app/api/wompi/webhook/route.ts`) es lo más crítico sin cubrir.
 - **La promesa de "Nequi/Bre-B sin cargo de pasarela"** de la propuesta sigue sin cumplirse:
