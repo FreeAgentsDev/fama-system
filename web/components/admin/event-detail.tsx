@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { adminErrorMessage } from "@/lib/admin-errors";
 import type { AdminTicket, BoxOfficeSnapshot } from "@/lib/admin-types";
 import { useAdminStream, type DomainStreamEvent } from "@/lib/use-admin-stream";
@@ -106,6 +106,47 @@ function estadoBadge(ticket: AdminTicket): { icon: string; label: string; classN
   return { icon: "○", label: "Afuera", className: "text-white/70" };
 }
 
+/**
+ * Un carrito queda `pending` en cuanto alguien reserva (ver `reserve-ticket` en el server) y
+ * ocupa el cupo de la etapa desde ese momento, no desde que paga. Si cierra el checkout de
+ * Wompi sin terminar, el webhook nunca llega y el ticket se queda `pending` sin que nadie se
+ * entere. Esto solo lo hace visible para que Daniel pueda recordarle a mano por WhatsApp —
+ * no libera el cupo de la etapa (eso vive en el dominio, es un cambio aparte).
+ */
+const ABANDONED_CART_MINUTES = 12;
+
+function isAbandonedCart(ticket: AdminTicket, now: number): boolean {
+  return ticket.paymentStatus === "pending" && now - new Date(ticket.createdAt).getTime() > ABANDONED_CART_MINUTES * 60_000;
+}
+
+function minutesAgo(iso: string, now: number): number {
+  return Math.max(0, Math.round((now - new Date(iso).getTime()) / 60_000));
+}
+
+/**
+ * Link de wa.me con el mensaje de recordatorio. Solo se llama desde el `onClick` del botón,
+ * nunca durante el render — así no depende de `window.location`, que en el primer render de
+ * Next.js todavía corre en el server y no existe.
+ */
+function cartReminderWhatsAppLink(ticket: AdminTicket, eventName: string, eventSlug: string): string {
+  const eventUrl = `${window.location.origin}/${eventSlug}`;
+  const text =
+    `Hola ${ticket.attendeeName} 👋 Vimos que ibas a comprar tu boleta para ${eventName} ` +
+    `y no alcanzaste a terminar el pago. Aquí puedes intentarlo de nuevo: ${eventUrl}`;
+  return `https://wa.me/57${ticket.phone}?text=${encodeURIComponent(text)}`;
+}
+
+/**
+ * Link de wa.me para reenviar la boleta (con su QR) a una compra ya pagada — para cuando el
+ * comprador perdió el link o el escaneo en puerta no se deja leer. Mismo criterio que arriba:
+ * solo se llama desde el `onClick`.
+ */
+function resendTicketWhatsAppLink(ticket: AdminTicket, eventName: string, eventSlug: string): string {
+  const boletaUrl = `${window.location.origin}/${eventSlug}/boleta/${ticket.id}`;
+  const text = `Hola ${ticket.attendeeName} 👋 aquí está tu boleta para ${eventName}, con tu QR: ${boletaUrl}`;
+  return `https://wa.me/57${ticket.phone}?text=${encodeURIComponent(text)}`;
+}
+
 function toCsv(tickets: AdminTicket[]): string {
   const header = [
     "nombre",
@@ -149,8 +190,16 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
   const [filter, setFilter] = useState<PresenceFilter>("todos");
   const [expandedTicketId, setExpandedTicketId] = useState<string | null>(null);
   const [presenceError, setPresenceError] = useState<string | null>(null);
+  const [remindedIds, setRemindedIds] = useState<Set<string>>(new Set());
+  const [now, setNow] = useState(() => Date.now());
 
   const eventId = snapshot.event.id;
+
+  // Recalcula quién lleva más de ABANDONED_CART_MINUTES pendiente sin que haya que recargar.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/admin/events/${eventId}`, { cache: "no-store" });
@@ -193,6 +242,29 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
       entries.map((key) => [key, allTickets.filter((t) => matchesFilter(t, key)).length]),
     ) as Record<PresenceFilter, number>;
   }, [allTickets]);
+
+  const abandonedCarts = useMemo(
+    () => allTickets.filter((ticket) => isAbandonedCart(ticket, now)),
+    [allTickets, now],
+  );
+
+  function handleRemind(ticket: AdminTicket) {
+    window.open(
+      cartReminderWhatsAppLink(ticket, snapshot.event.name, snapshot.event.slug),
+      "_blank",
+      "noopener,noreferrer",
+    );
+    setRemindedIds((prev) => new Set(prev).add(ticket.id));
+  }
+
+  function handleResend(ticket: AdminTicket) {
+    window.open(
+      resendTicketWhatsAppLink(ticket, snapshot.event.name, snapshot.event.slug),
+      "_blank",
+      "noopener,noreferrer",
+    );
+    setRemindedIds((prev) => new Set(prev).add(ticket.id));
+  }
 
   async function handleVoid(ticketId: string) {
     setBusyTicketId(ticketId);
@@ -382,6 +454,15 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
                           {activo && (
                             <button
                               type="button"
+                              onClick={() => handleResend(ticket)}
+                              className="text-xs text-white/50 hover:underline"
+                            >
+                              {remindedIds.has(ticket.id) ? "Reenviado ✓" : "Reenviar"}
+                            </button>
+                          )}
+                          {activo && (
+                            <button
+                              type="button"
                               onClick={() => handlePresence(ticket)}
                               disabled={busyTicketId === ticket.id}
                               className="text-xs text-[#4db8ff] hover:underline disabled:opacity-50"
@@ -478,6 +559,39 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
               <span>Anuladas: {snapshot.stats.voided}</span>
               <span>Restantes: {snapshot.stats.remaining}</span>
             </div>
+          </div>
+
+          <div className="fama-card p-5">
+            <h3 className="fama-kicker mb-3">Carritos abandonados ({abandonedCarts.length})</h3>
+            <ul className="space-y-3 text-sm">
+              {abandonedCarts.length === 0 && (
+                <li className="text-white/35">Nadie lleva más de {ABANDONED_CART_MINUTES} min sin pagar.</li>
+              )}
+              {abandonedCarts.map((ticket) => {
+                const reminded = remindedIds.has(ticket.id);
+                return (
+                  <li key={ticket.id} className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate">{ticket.attendeeName}</p>
+                      <p className="text-xs text-white/40">
+                        {ticket.stage} · hace {minutesAgo(ticket.createdAt, now)} min
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemind(ticket)}
+                      className={
+                        reminded
+                          ? "shrink-0 text-xs text-white/30"
+                          : "shrink-0 text-xs text-[#4db8ff] hover:underline"
+                      }
+                    >
+                      {reminded ? "Recordado ✓" : "Recordar"}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
 
           <div className="fama-card p-5">

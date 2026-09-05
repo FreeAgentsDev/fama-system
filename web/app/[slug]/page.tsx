@@ -65,7 +65,9 @@ export async function generateMetadata({
 const STEPS = [
   { n: "01", t: "Completa tus datos" },
   { n: "02", t: "Paga con tarjeta, Nequi o PSE" },
-  { n: "03", t: "Recibe tu QR por WhatsApp" },
+  // No prometemos un envío automático: el QR sale en pantalla apenas se confirma el pago, y
+  // en esa misma página hay un botón para mandárselo por WhatsApp a quien uno quiera.
+  { n: "03", t: "Recibe tu QR al instante" },
   { n: "04", t: "Muéstralo en la puerta" },
 ];
 

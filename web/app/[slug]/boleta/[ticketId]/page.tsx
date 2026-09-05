@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 import { FamaLogo } from "@/components/brand/fama-logo";
 import { PendingRefresher } from "@/components/public/pending-refresher";
+import { WhatsAppSendButton } from "@/components/public/whatsapp-send-button";
 import { getTicketStatus } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -90,8 +91,9 @@ export default async function BoletaPage({
         </div>
       </div>
       <p className="mt-6 max-w-sm text-center text-sm text-white/45">
-        Guarda este QR y muéstralo en la puerta. También te lo enviamos por WhatsApp.
+        Guarda este QR y muéstralo en la puerta.
       </p>
+      <WhatsAppSendButton attendeeName={ticket.attendeeName} eventName={event.name} />
     </div>
   );
 }
