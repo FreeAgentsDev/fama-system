@@ -19,6 +19,7 @@ export class EventsController extends IracaController {
             /^Issue/,
             /^Hide/,
             /^Publish/,
+            /^Update/,
           ],
         },
         { method: "get", patterns: [/^Get/, /^List/] },

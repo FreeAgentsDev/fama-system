@@ -6,6 +6,27 @@ import { scanTicket, type ScanOutcome } from "@/lib/api";
 
 const RESUME_DELAY_MS = 2000;
 
+/**
+ * getUserMedia lanza errores con nombres del estándar y mensajes en el idioma del navegador
+ * ("Permission denied"). La puerta la opera alguien de Fama con el celular en la mano, así que
+ * el mensaje tiene que decir qué hacer, en español.
+ */
+function cameraErrorMessage(error: unknown): string {
+  const name = error instanceof Error ? error.name : "";
+  switch (name) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return "No diste permiso de cámara. Ábrelo en los ajustes del navegador y recarga.";
+    case "NotFoundError":
+    case "OverconstrainedError":
+      return "No encontramos una cámara trasera en este equipo. Usa \"Escribir código\".";
+    case "NotReadableError":
+      return "Otra app está usando la cámara. Ciérrala y recarga esta página.";
+    default:
+      return "No se pudo abrir la cámara. Usa \"Escribir código\" mientras tanto.";
+  }
+}
+
 type ViewState =
   | { kind: "camera" }
   | { kind: "busy" }
@@ -88,11 +109,7 @@ export function DoorScanner() {
         controlsRef.current = controls;
       })
       .catch((error: unknown) => {
-        setCameraError(
-          error instanceof Error
-            ? error.message
-            : "No se pudo acceder a la cámara. Revisa los permisos en Chrome.",
-        );
+        setCameraError(cameraErrorMessage(error));
       });
 
     return () => {

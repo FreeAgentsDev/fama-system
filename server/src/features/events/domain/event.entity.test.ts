@@ -15,6 +15,7 @@ import {
   scanTicket,
   slugify,
   toAdminEventSummary,
+  updateEvent,
   voidTicket,
 } from "./event.entity";
 
@@ -287,5 +288,147 @@ describe("admin · cortesías y visibilidad", () => {
     assert.equal(summary.revenue, 20000);
     // Preventa y Segunda ya se llenaron (1 pagada + 1 cortesía): no queda ninguna etapa vigente.
     assert.equal(summary.currentStageName, null);
+  });
+});
+
+describe("updateEvent", () => {
+  function conUnaVenta() {
+    const sold = issueTicket(event(), "Ana", "3001234567");
+    assert.ok(sold.ok);
+    return sold.event;
+  }
+
+  it("edita nombre, sede y fecha sin tocar las etapas", () => {
+    const next = updateEvent(event(), {
+      name: "  Otra Noche  ",
+      venue: "  Terraza  ",
+      date: "2026-10-05T02:00:00.000Z",
+    });
+    assert.equal(next.name, "Otra Noche");
+    assert.equal(next.venue, "Terraza");
+    assert.equal(next.date, "2026-10-05T02:00:00.000Z");
+    assert.equal(next.stages.length, 2);
+  });
+
+  it("deja el slug vacío cayendo al nombre", () => {
+    const next = updateEvent(event(), { name: "Noche Fama", slug: "" });
+    assert.equal(next.slug, "noche-fama");
+  });
+
+  it("preserva soldCount al cambiarle el precio a una etapa", () => {
+    const next = updateEvent(conUnaVenta(), {
+      stages: [
+        { name: "Preventa", price: 25000, capacity: 1 },
+        { name: "Segunda", price: 40000, capacity: 1 },
+      ],
+    });
+    assert.equal(next.stages[0].price, 25000);
+    assert.equal(next.stages[0].soldCount, 1);
+  });
+
+  it("no le recobra nada a quien ya compró cuando sube el precio", () => {
+    const antes = conUnaVenta();
+    const pagado = antes.tickets[0].pricePaid;
+    const next = updateEvent(antes, {
+      stages: [
+        { name: "Preventa", price: 99000, capacity: 1 },
+        { name: "Segunda", price: 40000, capacity: 1 },
+      ],
+    });
+    assert.equal(next.tickets[0].pricePaid, pagado);
+  });
+
+  it("renombra una etapa y arrastra el nombre a los tickets", () => {
+    const next = updateEvent(conUnaVenta(), {
+      stages: [
+        { name: "Early Bird", previousName: "Preventa", price: 20000, capacity: 1 },
+        { name: "Segunda", price: 40000, capacity: 1 },
+      ],
+    });
+    assert.equal(next.stages[0].name, "Early Bird");
+    assert.equal(next.stages[0].soldCount, 1);
+    assert.equal(next.tickets[0].stage, "Early Bird");
+  });
+
+  it("rechaza dejar el cupo por debajo de lo ya vendido", () => {
+    assert.throws(
+      () =>
+        updateEvent(conUnaVenta(), {
+          stages: [
+            { name: "Preventa", price: 20000, capacity: 0 },
+            { name: "Segunda", price: 40000, capacity: 1 },
+          ],
+        }),
+      /mayor a 0/,
+    );
+  });
+
+  it("rechaza quitar una etapa que ya vendió", () => {
+    assert.throws(
+      () =>
+        updateEvent(conUnaVenta(), {
+          stages: [{ name: "Segunda", price: 40000, capacity: 1 }],
+        }),
+      /No puedes quitar la etapa "Preventa"/,
+    );
+  });
+
+  it("deja quitar una etapa que no vendió nada", () => {
+    const next = updateEvent(event(), {
+      stages: [{ name: "Preventa", price: 20000, capacity: 1 }],
+    });
+    assert.equal(next.stages.length, 1);
+  });
+
+  it("rechaza dos etapas con el mismo nombre", () => {
+    assert.throws(
+      () =>
+        updateEvent(event(), {
+          stages: [
+            { name: "Preventa", price: 20000, capacity: 1 },
+            { name: "Preventa", price: 40000, capacity: 1 },
+          ],
+        }),
+      /dos etapas llamadas/,
+    );
+  });
+
+  it("rechaza renombrar desde una etapa que no existe", () => {
+    assert.throws(
+      () =>
+        updateEvent(event(), {
+          stages: [
+            { name: "X", previousName: "No Existe", price: 20000, capacity: 1 },
+            { name: "Segunda", price: 40000, capacity: 1 },
+          ],
+        }),
+      /No existe una etapa llamada/,
+    );
+  });
+
+  it("un evento oculto sigue oculto después de editarlo", () => {
+    const next = updateEvent(hideEvent(event()), { name: "Sigue Oculta" });
+    assert.equal(next.status, "cancelled");
+  });
+
+  it("recalcula sold-out cuando el cupo nuevo ya está copado", () => {
+    const lleno = updateEvent(conUnaVenta(), {
+      stages: [{ name: "Preventa", price: 20000, capacity: 1 }],
+    });
+    assert.equal(lleno.status, "sold-out");
+  });
+
+  it("vuelve a published si le amplían el cupo a un sold-out", () => {
+    const lleno = updateEvent(conUnaVenta(), {
+      stages: [{ name: "Preventa", price: 20000, capacity: 1 }],
+    });
+    const ampliado = updateEvent(lleno, {
+      stages: [{ name: "Preventa", price: 20000, capacity: 5 }],
+    });
+    assert.equal(ampliado.status, "published");
+  });
+
+  it("exige al menos una etapa", () => {
+    assert.throws(() => updateEvent(event(), { stages: [] }), /al menos una etapa/);
   });
 });

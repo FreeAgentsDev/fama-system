@@ -406,6 +406,159 @@ export function issueCourtesyTicket(
   return { ok: true, event: next, ticket };
 }
 
+export interface UpdateEventStageInput {
+  name: string;
+  price: number;
+  capacity: number;
+  /**
+   * Nombre que tenía la etapa antes de renombrarla. Las etapas no tienen id propio, así que
+   * este campo es lo que distingue "renombré Preventa a Early Bird" de "borré Preventa y creé
+   * Early Bird" — y sin esa distinción se perdería el soldCount de la etapa.
+   */
+  previousName?: string;
+}
+
+export interface UpdateEventInput {
+  name?: string;
+  slug?: string;
+  date?: string | Date;
+  venue?: string;
+  /** `null` explícito quita el flyer; `undefined` lo deja como está. */
+  coverImageUrl?: string | null;
+  stages?: UpdateEventStageInput[];
+}
+
+/**
+ * Edita un evento ya creado sin tocar lo vendido.
+ *
+ * Lo que NO cambia: los tickets emitidos y su `pricePaid`. Subir el precio de una etapa no
+ * le recobra nada a quien ya compró — `pricePaid` vive en cada ticket, no en la etapa.
+ *
+ * Reglas duras (lanzan): no se puede borrar una etapa con ventas, ni dejarle un cupo menor a
+ * lo que ya vendió, porque cualquiera de las dos dejaría boletas emitidas sin respaldo.
+ */
+export function updateEvent(event: Event, input: UpdateEventInput): Event {
+  const next: Event = { ...event };
+
+  if (input.name !== undefined) {
+    if (!input.name.trim()) {
+      throw new Error("El nombre del evento es obligatorio.");
+    }
+    next.name = input.name.trim();
+  }
+
+  if (input.slug !== undefined) {
+    next.slug = slugify(input.slug.trim() || next.name);
+  }
+
+  if (input.date !== undefined) {
+    next.date = toIso(input.date);
+  }
+
+  if (input.venue !== undefined) {
+    next.venue = input.venue.trim() || "Fama MZL";
+  }
+
+  if (input.coverImageUrl !== undefined) {
+    next.coverImageUrl = input.coverImageUrl?.trim() || undefined;
+  }
+
+  if (input.stages !== undefined) {
+    const { stages, renames } = mergeStages(event, input.stages);
+    next.stages = stages;
+    if (renames.size > 0) {
+      next.tickets = event.tickets.map((ticket) =>
+        renames.has(ticket.stage)
+          ? { ...ticket, stage: renames.get(ticket.stage)! }
+          : ticket,
+      );
+    }
+  }
+
+  // Un evento oculto sigue oculto después de editarlo: republicarlo es una acción aparte
+  // ("Publicar" en el admin), no un efecto colateral de corregirle la fecha.
+  if (next.status !== "cancelled") {
+    next.status = remainingSeats(next) > 0 ? "published" : "sold-out";
+  }
+
+  return next;
+}
+
+function mergeStages(
+  event: Event,
+  input: UpdateEventStageInput[],
+): { stages: PriceStage[]; renames: Map<string, string> } {
+  if (!Array.isArray(input) || input.length === 0) {
+    throw new Error("El evento necesita al menos una etapa de precio.");
+  }
+
+  const previousByName = new Map(event.stages.map((stage) => [stage.name, stage]));
+  const renames = new Map<string, string>();
+  const seen = new Set<string>();
+  const matched = new Set<string>();
+
+  const stages = input.map((stage) => {
+    const name = stage.name?.trim();
+    const price = Number(stage.price);
+    const capacity = Number(stage.capacity);
+
+    if (!name) {
+      throw new Error("Cada etapa necesita un nombre.");
+    }
+    if (seen.has(name)) {
+      throw new Error(`Hay dos etapas llamadas "${name}". Los nombres deben ser distintos.`);
+    }
+    seen.add(name);
+
+    if (!Number.isFinite(price) || price < 0) {
+      throw new Error(`El precio de la etapa "${name}" no es válido.`);
+    }
+    if (!Number.isFinite(capacity) || capacity < 1) {
+      throw new Error(`El cupo de la etapa "${name}" debe ser mayor a 0.`);
+    }
+
+    const previousName = stage.previousName?.trim();
+    const previous = previousName
+      ? previousByName.get(previousName)
+      : previousByName.get(name);
+
+    if (previousName && !previous) {
+      throw new Error(`No existe una etapa llamada "${previousName}" para renombrar.`);
+    }
+
+    const soldCount = previous?.soldCount ?? 0;
+    if (Math.floor(capacity) < soldCount) {
+      throw new Error(
+        `La etapa "${name}" ya vendió ${soldCount} boletas: el cupo no puede quedar en ${Math.floor(capacity)}.`,
+      );
+    }
+
+    if (previous) {
+      matched.add(previous.name);
+      if (previous.name !== name) {
+        renames.set(previous.name, name);
+      }
+    }
+
+    return {
+      name,
+      price: Math.round(price),
+      capacity: Math.floor(capacity),
+      soldCount,
+    };
+  });
+
+  for (const previous of event.stages) {
+    if (!matched.has(previous.name) && previous.soldCount > 0) {
+      throw new Error(
+        `No puedes quitar la etapa "${previous.name}": ya vendió ${previous.soldCount} boletas.`,
+      );
+    }
+  }
+
+  return { stages, renames };
+}
+
 /** Quita el evento del listado público (`/admin` → "Ocultar"). No borra tickets ni cambia cupos. */
 export function hideEvent(event: Event): Event {
   return { ...event, status: "cancelled" };

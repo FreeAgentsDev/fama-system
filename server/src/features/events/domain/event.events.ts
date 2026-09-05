@@ -24,6 +24,16 @@ export const EventNotFoundDomainEvent = DomainEventKind<{ id: string }>(
   "EventNotFoundDomainEvent",
 );
 
+/**
+ * El slug ya lo usa otro evento. El slug es la URL pública (`/[slug]`), así que si se
+ * repite la página resolvería a cualquiera de los dos y la cartelera mostraría las dos
+ * noches con el mismo link.
+ */
+export const EventSlugTakenDomainEvent = DomainEventKind<{
+  slug: string;
+  existingEventId: string;
+}>("EventSlugTakenDomainEvent");
+
 export const TicketReservedDomainEvent = DomainEventKind<{
   event: PublicEvent;
   ticket: Ticket;
@@ -110,6 +120,11 @@ export const CourtesyTicketIssuedDomainEvent = DomainEventKind<{
   ticket: Ticket;
   whatsappLink: string;
 }>("CourtesyTicketIssuedDomainEvent");
+
+/** Emitido por UpdateEventUsecase — el admin editó datos o etapas de una noche ya creada. */
+export const EventUpdatedDomainEvent = DomainEventKind<PublicEvent>(
+  "EventUpdatedDomainEvent",
+);
 
 /** Emitido por PublishEventUsecase (Fase 4) — reversa de EventCancelledDomainEvent ("Ocultar"). */
 export const EventPublishedDomainEvent = DomainEventKind<PublicEvent>(

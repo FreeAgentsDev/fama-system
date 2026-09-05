@@ -116,7 +116,9 @@ function SalaLive({ eventId }: { eventId: string }) {
         <div className="text-8xl font-semibold tracking-tight text-emerald-300 [text-shadow:0_0_40px_rgba(52,211,153,0.5)]">
           {snapshot?.stats.inside ?? "—"}
         </div>
-        <div className="mt-2 text-sm uppercase tracking-[0.22em] text-white/45">personas adentro</div>
+        <div className="mt-2 text-sm uppercase tracking-[0.22em] text-white/45">
+          {snapshot?.stats.inside === 1 ? "persona adentro" : "personas adentro"}
+        </div>
       </div>
 
       <div className="w-full max-w-sm space-y-2 text-left">
