@@ -92,4 +92,21 @@ export interface CreateEventInput {
   stages: CreateEventStageInput[];
 }
 
+export interface UpdateEventStageInput {
+  name: string;
+  price: number;
+  capacity: number;
+  /** Nombre anterior cuando se está renombrando la etapa; sin esto se pierde el soldCount. */
+  previousName?: string;
+}
+
+export interface UpdateEventInput {
+  name?: string;
+  slug?: string;
+  date?: string;
+  venue?: string;
+  coverImageUrl?: string | null;
+  stages?: UpdateEventStageInput[];
+}
+
 export type { PublicEvent };

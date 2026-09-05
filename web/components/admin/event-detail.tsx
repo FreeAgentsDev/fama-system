@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
+import { adminErrorMessage } from "@/lib/admin-errors";
 import type { AdminTicket, BoxOfficeSnapshot } from "@/lib/admin-types";
 import { useAdminStream, type DomainStreamEvent } from "@/lib/use-admin-stream";
 
@@ -53,6 +55,40 @@ function describe(name: string, payload: Record<string, unknown>): FeedItem | nu
   }
 }
 
+type PresenceFilter = "todos" | "adentro" | "afuera" | "nunca" | "anuladas";
+
+const FILTER_LABELS: Record<PresenceFilter, string> = {
+  todos: "Todos",
+  adentro: "Adentro",
+  afuera: "Afuera",
+  nunca: "Sin entrar",
+  anuladas: "Anuladas",
+};
+
+function matchesFilter(ticket: AdminTicket, filter: PresenceFilter): boolean {
+  const voided = ticket.status === "voided";
+  switch (filter) {
+    case "adentro":
+      return !voided && ticket.presence === "inside";
+    // "Afuera" es quien ya entró y volvió a salir. Quien nunca entró tiene su propio filtro:
+    // en la puerta no es lo mismo buscar a alguien que salió a fumar que a alguien que no llegó.
+    case "afuera":
+      return !voided && ticket.presence === "outside" && ticket.entryCount > 0;
+    case "nunca":
+      return !voided && ticket.entryCount === 0;
+    case "anuladas":
+      return voided;
+    default:
+      return true;
+  }
+}
+
+function scanLabel(result: AdminTicket["scans"][number]["result"]): string {
+  if (result === "admitted") return "Entró";
+  if (result === "exited") return "Salió";
+  return "Rechazado";
+}
+
 function estadoBadge(ticket: AdminTicket): { icon: string; label: string; className: string } {
   if (ticket.status === "voided") {
     return { icon: "✕", label: "Anulada", className: "text-[#ff8a8a]" };
@@ -63,11 +99,26 @@ function estadoBadge(ticket: AdminTicket): { icon: string; label: string; classN
   if (ticket.presence === "inside") {
     return { icon: "●", label: "Adentro", className: "text-emerald-300" };
   }
+  // En la puerta no es lo mismo alguien que salió a fumar que alguien que todavía no llega:
+  // el primero ya está contado como asistente, el segundo puede que nunca aparezca.
+  if (ticket.entryCount === 0) {
+    return { icon: "○", label: "Sin entrar", className: "text-white/45" };
+  }
   return { icon: "○", label: "Afuera", className: "text-white/70" };
 }
 
 function toCsv(tickets: AdminTicket[]): string {
-  const header = ["nombre", "telefono", "etapa", "precio_pagado", "estado", "pago", "codigo"];
+  const header = [
+    "nombre",
+    "telefono",
+    "etapa",
+    "precio_pagado",
+    "estado",
+    "entradas",
+    "ultimo_movimiento",
+    "pago",
+    "codigo",
+  ];
   const rows = tickets.map((ticket) => {
     const estado = estadoBadge(ticket);
     return [
@@ -76,6 +127,8 @@ function toCsv(tickets: AdminTicket[]): string {
       ticket.stage,
       String(ticket.pricePaid),
       estado.label,
+      String(ticket.entryCount),
+      ticket.lastScanAt ?? "",
       ticket.paymentStatus,
       ticket.code,
     ]
@@ -94,6 +147,9 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
   const [courtesyPhone, setCourtesyPhone] = useState("");
   const [courtesyError, setCourtesyError] = useState<string | null>(null);
   const [courtesyLoading, setCourtesyLoading] = useState(false);
+  const [filter, setFilter] = useState<PresenceFilter>("todos");
+  const [expandedTicketId, setExpandedTicketId] = useState<string | null>(null);
+  const [presenceError, setPresenceError] = useState<string | null>(null);
 
   const eventId = snapshot.event.id;
 
@@ -122,10 +178,22 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
 
   useAdminStream(handleStreamEvent);
 
-  const tickets = useMemo(
+  const allTickets = useMemo(
     () => [...snapshot.event.tickets].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     [snapshot.event.tickets],
   );
+
+  const tickets = useMemo(
+    () => allTickets.filter((ticket) => matchesFilter(ticket, filter)),
+    [allTickets, filter],
+  );
+
+  const counts = useMemo(() => {
+    const entries = Object.keys(FILTER_LABELS) as PresenceFilter[];
+    return Object.fromEntries(
+      entries.map((key) => [key, allTickets.filter((t) => matchesFilter(t, key)).length]),
+    ) as Record<PresenceFilter, number>;
+  }, [allTickets]);
 
   async function handleVoid(ticketId: string) {
     setBusyTicketId(ticketId);
@@ -135,6 +203,30 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticketId }),
       });
+      await refresh();
+    } finally {
+      setBusyTicketId(null);
+    }
+  }
+
+  /**
+   * Marca entrada o salida a mano. Va por el mismo scan-ticket que la puerta, así que el
+   * movimiento queda registrado con hora y origen "admin" en vez de aparecer de la nada.
+   */
+  async function handlePresence(ticket: AdminTicket) {
+    setBusyTicketId(ticket.id);
+    setPresenceError(null);
+    try {
+      const res = await fetch(`/api/admin/events/${eventId}/presence`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: ticket.code }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setPresenceError(adminErrorMessage(body, "No se pudo marcar el movimiento."));
+        return;
+      }
       await refresh();
     } finally {
       setBusyTicketId(null);
@@ -182,12 +274,20 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
   return (
     <div>
       <p className="fama-kicker">{snapshot.event.venue}</p>
-      <h1 className="mt-2 mb-8 text-3xl font-semibold tracking-tight">{snapshot.event.name}</h1>
+      <div className="mt-2 mb-8 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-3xl font-semibold tracking-tight">{snapshot.event.name}</h1>
+        <Link href={`/admin/eventos/${eventId}/editar`} className="fama-btn-ghost text-xs">
+          Editar evento
+        </Link>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <div>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">Compradores ({tickets.length})</h2>
+            <h2 className="text-lg font-semibold">
+              Compradores ({tickets.length}
+              {filter !== "todos" ? ` de ${allTickets.length}` : ""})
+            </h2>
             <div className="flex gap-2">
               <button type="button" onClick={() => setCourtesyOpen((prev) => !prev)} className="fama-btn-ghost text-xs">
                 + Cortesía
@@ -197,6 +297,25 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
               </button>
             </div>
           </div>
+
+          <div className="mb-4 flex flex-wrap gap-2">
+            {(Object.keys(FILTER_LABELS) as PresenceFilter[]).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilter(key)}
+                className={
+                  filter === key
+                    ? "rounded-full bg-[#e8b84a] px-3 py-1.5 text-xs font-semibold text-black"
+                    : "rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/60 hover:bg-white/10"
+                }
+              >
+                {FILTER_LABELS[key]} ({counts[key]})
+              </button>
+            ))}
+          </div>
+
+          {presenceError && <p className="mb-3 text-sm text-[#ff8a8a]">{presenceError}</p>}
 
           {courtesyOpen && (
             <form onSubmit={handleCourtesySubmit} className="fama-card mb-4 flex flex-wrap items-end gap-3 p-4">
@@ -232,6 +351,7 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
                   <th>Etapa</th>
                   <th>Precio</th>
                   <th>Estado</th>
+                  <th>Movs.</th>
                   <th></th>
                 </tr>
               </thead>
@@ -239,7 +359,9 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
                 {tickets.map((ticket) => {
                   const estado = estadoBadge(ticket);
                   const canVoid = ticket.status !== "voided" && ticket.entryCount === 0;
-                  return (
+                  const activo = ticket.status !== "voided" && ticket.paymentStatus === "approved";
+                  const expanded = expandedTicketId === ticket.id;
+                  return [
                     <tr key={ticket.id}>
                       <td>{ticket.attendeeName}</td>
                       <td className="text-white/50">{ticket.phone}</td>
@@ -248,25 +370,92 @@ export function EventDetail({ initialSnapshot }: { initialSnapshot: BoxOfficeSna
                       <td className={estado.className}>
                         {estado.icon} {estado.label}
                       </td>
-                      <td className="text-right">
-                        {canVoid && (
+                      <td>
+                        {ticket.scans.length > 0 ? (
                           <button
                             type="button"
-                            onClick={() => handleVoid(ticket.id)}
-                            disabled={busyTicketId === ticket.id}
-                            className="text-xs text-[#ff8a8a] hover:underline disabled:opacity-50"
+                            onClick={() => setExpandedTicketId(expanded ? null : ticket.id)}
+                            className="text-xs text-white/60 hover:text-white hover:underline"
                           >
-                            Anular
+                            {ticket.scans.length} {expanded ? "▾" : "▸"}
                           </button>
+                        ) : (
+                          <span className="text-xs text-white/25">—</span>
                         )}
                       </td>
-                    </tr>
-                  );
+                      <td className="text-right">
+                        <div className="flex justify-end gap-3">
+                          {activo && (
+                            <button
+                              type="button"
+                              onClick={() => handlePresence(ticket)}
+                              disabled={busyTicketId === ticket.id}
+                              className="text-xs text-[#4db8ff] hover:underline disabled:opacity-50"
+                            >
+                              {ticket.presence === "inside" ? "Marcar salida" : "Marcar entrada"}
+                            </button>
+                          )}
+                          {canVoid && (
+                            <button
+                              type="button"
+                              onClick={() => handleVoid(ticket.id)}
+                              disabled={busyTicketId === ticket.id}
+                              className="text-xs text-[#ff8a8a] hover:underline disabled:opacity-50"
+                            >
+                              Anular
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>,
+                    expanded ? (
+                      <tr key={`${ticket.id}-movs`}>
+                        <td colSpan={7} className="bg-white/[0.03]">
+                          <div className="px-2 py-3">
+                            <p className="mb-2 text-xs uppercase tracking-[0.18em] text-white/35">
+                              Movimientos de {ticket.attendeeName} · {ticket.code}
+                            </p>
+                            <ol className="space-y-1.5">
+                              {[...ticket.scans]
+                                .sort((a, b) => b.at.localeCompare(a.at))
+                                .map((scan, index) => (
+                                  <li
+                                    key={`${scan.at}-${index}`}
+                                    className="flex items-center gap-3 text-sm"
+                                  >
+                                    <span
+                                      className={
+                                        scan.result === "admitted"
+                                          ? "text-emerald-300"
+                                          : scan.result === "exited"
+                                            ? "text-[#e8b84a]"
+                                            : "text-[#ff8a8a]"
+                                      }
+                                    >
+                                      {scan.result === "admitted" ? "→" : scan.result === "exited" ? "←" : "✕"}{" "}
+                                      {scanLabel(scan.result)}
+                                    </span>
+                                    <span className="text-white/45">
+                                      {timeFormatter.format(new Date(scan.at))}
+                                    </span>
+                                    <span className="text-xs text-white/30">
+                                      {scan.gate === "admin" ? "a mano desde el admin" : `puerta: ${scan.gate}`}
+                                    </span>
+                                  </li>
+                                ))}
+                            </ol>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null,
+                  ];
                 })}
                 {tickets.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-white/40">
-                      Todavía no hay compradores.
+                    <td colSpan={7} className="py-10 text-center text-white/40">
+                      {allTickets.length === 0
+                        ? "Todavía no hay compradores."
+                        : "Nadie en este filtro."}
                     </td>
                   </tr>
                 )}

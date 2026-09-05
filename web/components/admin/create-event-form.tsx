@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { adminErrorMessage } from "@/lib/admin-errors";
 import type { CreateEventStageInput } from "@/lib/admin-types";
 
 interface StageDraft extends CreateEventStageInput {
@@ -59,8 +60,8 @@ export function CreateEventForm() {
         }),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError(body.error ?? "No se pudo crear el evento.");
+        const body = await res.json().catch(() => null);
+        setError(adminErrorMessage(body, "No se pudo crear el evento."));
         return;
       }
       const created = await res.json();

@@ -9,7 +9,13 @@
 const IRACA_URL = process.env.IRACA_URL ?? "http://localhost:2436";
 
 export interface IracaEnvelope<T> {
-  meta: { code: string };
+  /**
+   * `message` solo viene cuando el dominio lanzó una excepción: Iraca la devuelve como
+   * `{code: "Events:Error", message: "..."}`. Los mensajes del dominio ya están en español
+   * y son los que mejor explican por qué se rechazó una edición, así que las rutas de admin
+   * los reenvían tal cual al formulario.
+   */
+  meta: { code: string; message?: string };
   data: T;
 }
 

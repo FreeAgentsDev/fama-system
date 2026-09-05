@@ -22,7 +22,10 @@ export async function POST(request: Request): Promise<Response> {
   const result = await iracaPost<PublicEvent>("/events/create-event", body);
   const name = eventNameOf(result.meta.code);
   if (name !== "EventCreatedDomainEvent") {
-    return NextResponse.json({ error: name }, { status: 400 });
+    return NextResponse.json(
+      { error: name, message: result.meta.message },
+      { status: 400 },
+    );
   }
   return NextResponse.json(result.data);
 }
