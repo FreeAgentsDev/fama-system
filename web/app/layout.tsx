@@ -16,10 +16,11 @@ const greatVibes = Great_Vibes({
 
 export const metadata: Metadata = {
   title: {
-    default: "Fama MZL — Boletería virtual",
+    default: "Fama MZL — Lounge en Manizales",
     template: "%s — Fama MZL",
   },
-  description: "Aparta tu boleta para las noches de Fama MZL, Manizales.",
+  description:
+    "Tragos con alma, noches con historia. Cartelera, boletas con QR y la casa de Fama en Manizales.",
 };
 
 export const viewport: Viewport = {
