@@ -155,14 +155,57 @@ al compartir el link, y $15.448 al pagar. Ahora ambas usan `publicPrice`.
   los dos. Falta un `EventSlugTakenDomainEvent` y su manejo en el form del admin.
 - Desplegar: server a Railway, web a Vercel, con dominio para la demo.
 
-### Pulido menor (no bloquea la demo)
+### Pulido menor — hecho
 
-- `/admin/sala` dice "1 PERSONAS ADENTRO" — falta singular.
-- El error de cámara en `/puerta` muestra el mensaje crudo del navegador en inglés
-  ("Permission denied") en una pantalla que si no está toda en español.
-- Los flyers son los originales de la propuesta y traen la fecha vieja impresa
-  ("13 de Agosto" en Precupido) mientras el texto dice 12 de septiembre. Daniel lo
-  va a notar en la demo.
+- ~~"1 PERSONAS ADENTRO"~~ → singular arreglado.
+- ~~Error de cámara en inglés~~ → `/puerta` traduce los errores de `getUserMedia`
+  por nombre (`NotAllowedError`, `NotFoundError`, `NotReadableError`) y cada uno
+  dice qué hacer.
+- **Pendiente:** los flyers son los originales de la propuesta y traen la fecha
+  vieja impresa ("13 de Agosto" en Precupido) mientras el texto dice 12 de
+  septiembre. No se arregla desde el código: hay que regenerar las imágenes.
+  Daniel lo va a notar en la demo.
+
+## Ampliación del admin (4 sep)
+
+### Edición de eventos
+`updateEvent()` en el dominio + `UpdateEventUsecase` (`POST /events/update-event`) y
+`/admin/eventos/[id]/editar`. Se editan nombre, enlace, fecha, sede, flyer y etapas.
+
+Lo que **no** se puede hacer, y por qué —cualquiera de las dos dejaría boletas
+emitidas sin respaldo:
+- quitar una etapa que ya vendió
+- dejarle a una etapa un cupo menor a lo que ya vendió
+
+El `pricePaid` de quien ya compró nunca se toca: vive en el ticket, no en la etapa,
+así que subir un precio no le recobra nada a nadie. Renombrar una etapa manda
+`previousName` y arrastra el nombre a sus tickets — sin eso, un renombre se vería
+como borrar+crear y perdería el `soldCount`. Un evento oculto sigue oculto después
+de editarlo.
+
+El formulario aplica las mismas reglas antes de enviar (cupo mínimo, botón de quitar
+bloqueado) y el server las valida igual.
+
+### Slug único
+`EventSlugTakenDomainEvent` en create y en update. Era el hueco anotado antes: el
+slug es la URL pública, y repetido hacía que `/[slug]` resolviera a cualquiera de las
+dos noches.
+
+### Control de puerta
+- Filtros con conteo: Todos · Adentro · Afuera · Sin entrar · Anuladas. **"Afuera"
+  (entró y se fue) y "Sin entrar" (nunca llegó) están separados a propósito:** en la
+  puerta no es la misma pregunta.
+- "Marcar entrada"/"Marcar salida" a mano, para cuando el QR no se deja leer. Va por
+  el mismo `scan-ticket` que la puerta con `gate: "admin"`, así queda registrado con
+  hora y origen y la sala en vivo se entera igual.
+- Historial de movimientos por boleta, con hora y si vino de la puerta o del admin.
+- El CSV suma `entradas` y `ultimo_movimiento`.
+
+### Fuera de alcance, a propósito
+La **base de clientes cruzada entre eventos** ("quién vino, a qué noche") es tier 3
+en la propuesta ($1.500.000, no contratado) y **no se construyó**. Lo que sí está
+—porque el tier 2 lo incluye explícitamente— es la lista de quién compró *por evento*
+y el control de entradas/salidas.
 
 ## Cosas que ya están bien (no romper)
 
