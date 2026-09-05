@@ -4,7 +4,8 @@ import { PublicHeader } from "@/components/brand/public-header";
 import { WompiCheckoutButton } from "@/components/wompi-checkout-button";
 import { getEventBySlug } from "@/lib/api";
 
-export const revalidate = 15;
+// Sin `revalidate`: los fetch de lib/api.ts usan cache: "no-store", que fuerza render
+// dinámico y deja la ventana de ISR sin efecto. El cupo restante debe ir al día.
 
 const currency = new Intl.NumberFormat("es-CO", {
   style: "currency",
@@ -40,8 +41,10 @@ export async function generateMetadata({
   const { slug } = await params;
   try {
     const event = await getEventBySlug(slug);
+    // publicPrice, no currentStage.price: el segundo es lo que recibe Daniel y el primero
+    // es lo que paga el comprador. Esta descripción es la que se ve al compartir el link.
     const priceLabel = event.currentStage
-      ? `Cover desde ${currency.format(event.currentStage.price)}.`
+      ? `Cover desde ${currency.format(event.publicPrice)}.`
       : "Evento agotado.";
     const title = event.name;
     const description = `Aparta tu boleta para ${event.name} en Fama MZL, Manizales. ${priceLabel}`;

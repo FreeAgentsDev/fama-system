@@ -2,7 +2,9 @@ import Link from "next/link";
 import { FamaLogo } from "@/components/brand/fama-logo";
 import { listPublishedEvents, type PublicEvent } from "@/lib/api";
 
-export const revalidate = 30;
+// Sin `revalidate`: lib/api.ts hace los fetch con cache: "no-store", lo que fuerza
+// render dinámico y deja sin efecto cualquier ventana de ISR. La cartelera se pide
+// fresca en cada visita, que es lo que queremos cuando una etapa se puede agotar.
 
 const currency = new Intl.NumberFormat("es-CO", {
   style: "currency",
@@ -43,7 +45,7 @@ function EventCard({ event }: { event: PublicEvent }) {
           {event.venue} · {dateFormatter.format(new Date(event.date))}
         </p>
         <p className="mt-4 text-lg font-semibold text-[#e8b84a]">
-          {soldOut ? "Sin cupos" : `Desde ${currency.format(event.currentStage!.price)}`}
+          {soldOut ? "Sin cupos" : `Desde ${currency.format(event.publicPrice)}`}
         </p>
       </div>
     </Link>
@@ -52,10 +54,14 @@ function EventCard({ event }: { event: PublicEvent }) {
 
 export default async function HomePage() {
   let events: PublicEvent[] = [];
+  let loadFailed = false;
   try {
     events = (await listPublishedEvents()).filter((event) => event.status !== "cancelled");
-  } catch {
-    events = [];
+  } catch (error) {
+    // Tragarse esto en silencio fue lo que escondió el bug del método HTTP: la cartelera
+    // decía "no hay fechas" ante un 404 del backend. Un fallo de red no es una cartelera vacía.
+    console.error("No se pudo cargar la cartelera:", error);
+    loadFailed = true;
   }
 
   return (
@@ -80,7 +86,12 @@ export default async function HomePage() {
             </div>
           </div>
 
-          {events.length === 0 ? (
+          {loadFailed ? (
+            <div className="fama-card px-6 py-14 text-center">
+              <p className="text-lg font-medium">No pudimos cargar la cartelera.</p>
+              <p className="mt-2 text-sm text-white/50">Refresca la página en un momento.</p>
+            </div>
+          ) : events.length === 0 ? (
             <div className="fama-card px-6 py-14 text-center">
               <p className="text-lg font-medium">Aún no hay fechas publicadas.</p>
               <p className="mt-2 text-sm text-white/50">Vuelve pronto o sigue a Fama en Instagram.</p>
