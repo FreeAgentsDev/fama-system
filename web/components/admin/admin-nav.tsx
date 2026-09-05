@@ -6,7 +6,7 @@ import { FamaLogo } from "@/components/brand/fama-logo";
 
 const LINKS = [
   { href: "/admin/eventos", label: "Eventos" },
-  { href: "/admin/sala", label: "Sala" },
+  { href: "/admin/salas", label: "Salas" },
 ];
 
 export function AdminNav() {

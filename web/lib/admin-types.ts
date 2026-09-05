@@ -11,6 +11,18 @@ export interface AdminEventSummary {
   sold: number;
   capacity: number;
   revenue: number;
+  remaining: number;
+  /** Adentro ahora mismo. */
+  inside: number;
+  /** Entró y ya salió. */
+  outside: number;
+  /** Entró al menos una vez: la asistencia real de la noche. */
+  attended: number;
+  /** Compró y nunca cruzó la puerta. */
+  neverEntered: number;
+  entries: number;
+  voided: number;
+  lastScanAt?: string;
 }
 
 export interface GateScan {
