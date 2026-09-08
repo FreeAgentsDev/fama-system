@@ -4,3 +4,6 @@ node_modules/
 dist/
 .next/
 .firebase/
+
+# macOS
+.DS_Store
