@@ -13,7 +13,7 @@
  * mismo internalSecret que usa el webhook de Wompi. No se escribe nada "a mano" en el store.
  *
  * Los precios son LO QUE RECIBE DANIEL: el sistema le suma la comisión de Wompi para
- * calcular el precio público (ver WOMPI_FEE_RATE en event.entity.ts).
+ * calcular el precio público (ver priceWithWompiFee en event.entity.ts).
  */
 
 import { loadEnv } from "./load-env";

@@ -13,6 +13,8 @@ import {
   publishEvent,
   rejectPayment,
   expireStalePendingTickets,
+  priceWithWompiFee,
+  wompiFee,
   scanTicket,
   slugify,
   toAdminEventSummary,
@@ -51,6 +53,36 @@ describe("wompiIntegritySignature", () => {
   });
 });
 
+describe("tarifa de Wompi", () => {
+  // La regla de negocio central: el precio que Daniel carga en una etapa es lo que Daniel
+  // recibe. El comprador absorbe la comisión, el venue no.
+  for (const neto of [15000, 20000, 40000, 50000, 60000]) {
+    it(`una etapa de $${neto.toLocaleString("es-CO")} le deja a Daniel al menos eso`, () => {
+      const publico = priceWithWompiFee(neto);
+      const recibe = publico - wompiFee(publico);
+      assert.ok(
+        recibe >= neto,
+        `con precio público ${publico} a Daniel le llegan ${recibe.toFixed(0)}, menos que ${neto}`,
+      );
+      // Y no de más: el redondeo hacia arriba no debe pasarse de un peso.
+      assert.ok(recibe < neto + 1, `se está cobrando de más: llegan ${recibe.toFixed(0)}`);
+    });
+  }
+
+  it("cobra la parte fija, no solo el porcentaje", () => {
+    // El bug viejo: dividir por (1 - 0.029) daba 15.448 y a Daniel le llegaban 14.128.
+    assert.ok(
+      priceWithWompiFee(15000) > Math.ceil(15000 / (1 - 0.029)),
+      "el precio nuevo tiene que ser mayor que el del modelo sin tarifa fija",
+    );
+  });
+
+  it("wompiFee aplica IVA sobre la comisión, no sobre la venta", () => {
+    // (10.000 * 2,65% + 700) * 1,19 = (265 + 700) * 1,19 = 1.148,35
+    assert.ok(Math.abs(wompiFee(10000) - 1148.35) < 0.01);
+  });
+});
+
 describe("normalizePhone", () => {
   it("acepta el number que Iraca produce con forceNumbers", () => {
     assert.equal(normalizePhone(3001234567), "3001234567");
@@ -76,8 +108,9 @@ describe("agregado Event · etapas de precio", () => {
     const evt = event();
     const stage = currentStage(evt);
     assert.equal(stage?.name, "Preventa");
-    // 20000 / (1 - 0.029) = 20.597,32... -> ceil = 20598
-    assert.equal(publicPrice(evt), 20598);
+    // (20000 + 700*1,19) / (1 - 0,0265*1,19) = 21.511,4... -> ceil = 21512
+    // Y lo que importa: de esos 21.512, a Daniel le llegan los 20.000 completos.
+    assert.equal(publicPrice(evt), 21512);
   });
 
   it("al agotar una etapa, pasa automáticamente a la siguiente", () => {

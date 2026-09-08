@@ -6,8 +6,25 @@ export type Presence = "outside" | "inside";
 export type ScanResult = "admitted" | "exited" | "rejected-voided";
 export type PaymentStatus = "pending" | "approved" | "rejected";
 
-/** Comisión de Wompi que se absorbe en el precio público (no en lo que recibe Daniel). */
-export const WOMPI_FEE_RATE = 0.029;
+/**
+ * Tarifa de Wompi, Plan Avanzado: **2,65% + $700 + IVA** por transacción exitosa.
+ * Cubre tarjetas, PSE, Nequi y botón Bancolombia por igual.
+ * https://wompi.com/es/co/planes-tarifas/
+ *
+ * Antes esto era un único `WOMPI_FEE_RATE = 0.029` y **se olvidaba la tarifa fija**, que es
+ * la parte que más pesa en un cover de discoteca. Con el modelo viejo, una etapa de $15.000
+ * cobraba $15.448 al comprador y a Daniel le llegaban **$14.128**: le faltaban $872 por
+ * boleta, ~$130.000 en una noche de 150 covers. Rompía la regla de negocio central —el
+ * precio de la etapa es lo que recibe Daniel— y nadie lo iba a notar hasta cuadrar caja.
+ *
+ * La propuesta que se le mandó a Daniel sí tenía la cuenta bien (dice ~$1.460 de recargo
+ * sobre una preventa de $20.000, y el número correcto es $1.512); era el código el que
+ * estaba mal.
+ */
+export const WOMPI_PERCENT_FEE = 0.0265;
+export const WOMPI_FIXED_FEE = 700;
+/** El IVA se cobra sobre la comisión de Wompi, no sobre la venta. */
+export const IVA_RATE = 0.19;
 
 export interface GateScan {
   at: string;
@@ -147,11 +164,37 @@ export function currentStage(event: Event): PriceStage | null {
   return event.stages.find((stage) => stage.soldCount < stage.capacity) ?? null;
 }
 
+/**
+ * Lo que Wompi se queda de un cobro de `amount` pesos.
+ * `(amount * 2,65% + $700) * 1,19`
+ */
+export function wompiFee(amount: number): number {
+  return (amount * WOMPI_PERCENT_FEE + WOMPI_FIXED_FEE) * (1 + IVA_RATE);
+}
+
+/**
+ * Precio que paga el comprador para que a Daniel le lleguen `netPrice` completos.
+ *
+ * Se despeja `p` de `p - (p*r + f)*(1+iva) = netPrice`:
+ *
+ *     p = (netPrice + f*(1+iva)) / (1 - r*(1+iva))
+ *
+ * No basta con dividir por `(1 - tarifa)`: la parte fija hay que sumarla arriba, con su IVA.
+ * Se redondea hacia arriba, así que Daniel recibe el precio de la etapa o un peso más,
+ * nunca menos.
+ */
+export function priceWithWompiFee(netPrice: number): number {
+  const withIva = 1 + IVA_RATE;
+  return Math.ceil(
+    (netPrice + WOMPI_FIXED_FEE * withIva) / (1 - WOMPI_PERCENT_FEE * withIva),
+  );
+}
+
 /** Precio que paga el comprador: el precio de Daniel absorbiendo la comisión de Wompi. */
 export function publicPrice(event: Event): number {
   const stage = currentStage(event);
   if (!stage) return 0;
-  return Math.ceil(stage.price / (1 - WOMPI_FEE_RATE));
+  return priceWithWompiFee(stage.price);
 }
 
 export function occupancy(event: Event): {
