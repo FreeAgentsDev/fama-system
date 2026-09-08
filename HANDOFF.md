@@ -43,29 +43,7 @@ llegando al `next dev` de siempre.
 **Verificado de punta a punta:** navegando en `localhost:3000`, el modal de Wompi abre dentro
 de la app (altura 1433px, antes 0) con todos los métodos de pago.
 
-## 🔴 Bloqueador de la demo que sigue abierto: el webhook no llega a localhost
-
-El **único** camino que pasa un ticket de `pending` a `approved` es el POST que Wompi le hace
-a `web/app/api/wompi/webhook/route.ts`. Los servidores de Wompi no pueden alcanzar
-`localhost:3000` (ni `lvh.me:3000`, que del lado de ellos resuelve a su propia máquina).
-
-Consecuencia: **en una demo 100% local el pago no se puede completar.** El comprador paga, lo
-redirige a la boleta, y esa página se queda en "Confirmando tu pago" para siempre.
-
-Para el lunes hay que elegir uno:
-
-1. **Desplegar** (`web` a Vercel + `server` a Railway) — es lo que ya estaba en la lista, y
-   deja la demo abrible desde el celular de Daniel. Ver el runbook abajo.
-2. **Túnel** (`ngrok http 3000` o `cloudflared`) — expone el localhost con una URL pública.
-   Hay que poner esa URL como `NEXT_PUBLIC_PUBLIC_URL` en `web/.env.local` y registrarla como
-   URL de eventos en el dashboard de Wompi. Sirve para el lunes sin desplegar nada.
-
-Un camino más robusto para después (no hace falta el lunes): al volver del checkout, Wompi
-agrega `id=<transaction_id>` a la URL de redirección. La página de la boleta podría consultar
-la transacción contra la API pública de Wompi y confirmar sin depender del webhook. Eso haría
-que el flujo funcione incluso en local.
-
-## Deploy — HECHO (5 sep). Falta un paso en el dashboard de Wompi
+## Deploy — HECHO y verificado con un pago real (5 sep)
 
 | Pieza | Dónde | Estado |
 |---|---|---|
@@ -87,11 +65,21 @@ renderiza el QR. Eso prueba de una sola pasada la firma de eventos, que Vercel a
 Render, que el `INTERNAL_WEBHOOK_SECRET` coincide en ambos, y que confirm-payment escribe a
 Firestore.
 
-Ojo: fue un evento **simulado**, no una tarjeta real pasando por el checkout de Wompi. La
-plomería está probada; falta hacer una compra real de sandbox al menos una vez.
+**Y después se hizo la compra real.** Tarjeta de sandbox `4242 4242 4242 4242` pasando por el
+checkout de verdad: transacción `12181987-1788594735-61443` APPROVED, ticket `TQT-VG6LXADD`
+confirmado en Firestore con el id real de Wompi en `paymentRef`, y el QR renderizando. La
+cadena completa —reserva, checkout, pago, webhook, confirmación, QR— está probada de punta a
+punta en producción.
 
-Quedó un ticket de prueba a nombre de **"Prueba Webhook"** en Girls Power. Se puede anular
-desde el panel (botón "Anular") si estorba en la demo.
+Esa compra destapó el último bug: **el widget no redirige solo.** `redirectUrl` sólo aplica a
+los métodos que sacan al comprador del iframe (PSE, Nequi); con tarjeta, la función de
+respuesta de `checkout.open()` es el único aviso, y sólo escribía en consola. El comprador
+pagaba, le daba "volver al comercio" y se quedaba en la misma página del evento. Arreglado con
+`router.push` a la boleta. **Sin verificar todavía con un pago posterior al arreglo.**
+
+Quedan dos tickets de prueba: **"Prueba Webhook"** en Girls Power y **"miguel gallego"** en
+Precupido. El primero conviene anularlo desde el panel antes de la demo; el segundo sirve para
+mostrar cómo se ve una boleta pagada.
 
 ### Notas del deploy que cuesta re-descubrir
 
