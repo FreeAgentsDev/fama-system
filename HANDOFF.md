@@ -167,6 +167,52 @@ cd server && pnpm test                    # 53 tests
   propia de Miguel, no la de Daniel — así se hace a propósito, ver doc de Wompi:
   sandbox y producción son ambientes completamente separados).
 
+## ⚠️ Antes de mandarle el enlace a Daniel — checklist
+
+En este orden. Los dos primeros son los que pueden arruinar la primera impresión.
+
+1. **Subir Render a Starter ($7/mes).** La instancia free se duerme a los 15 min. Si Daniel
+   abre el link cuando le quede tiempo —no en el minuto en que se lo mandas— lo primero que
+   ve es una pantalla en blanco durante ~50 s. Es la inversión más rentable de la semana.
+2. **Hacer un pago de prueba.** El arreglo de la navegación al terminar el widget está
+   desplegado pero **sin verificar con dinero**. Tarjeta `4242 4242 4242 4242`, cualquier
+   fecha futura, CVV `123`. Debe terminar en la boleta con el QR, no en la página del evento.
+3. **Rotar la llave de servicio de Firebase.** Quedó expuesta en una captura de pantalla
+   durante la sesión del 5 sep. Configuración del proyecto → Cuentas de servicio → generar
+   nueva, actualizar las 3 variables en Render, borrar la vieja en Google Cloud Console.
+4. **Anular el ticket "Prueba Webhook"** de Girls Power desde el panel. Se ve descuidado.
+5. **Pagar Vercel Pro** (ver la sección de costos: Hobby prohíbe el uso comercial).
+
+### Lo que hay que pedirle a Daniel
+
+- **Que abra su propia cuenta de Wompi.** Es el bloqueante real de producción y **nadie más
+  puede hacerlo**: la plata tiene que caer en la cuenta de Fama, no en la de Miguel. Exige
+  RUT, cédula y certificación bancaria, y se demora días. Todo lo que hay hoy corre sobre la
+  cuenta sandbox de Miguel.
+- Fotos del local en buena resolución (5 o 6) → encienden la galería, que hoy está apagada.
+- **Confirmar los horarios.** El sitio dice "viernes y sábado, 7:00 p. m. – 3:00 a. m."
+  sacado de una ficha pública, sin confirmar con él.
+- El WhatsApp de reservas (la bio del Instagram dice "Reservas 👇🏼" pero no publica número).
+- Acordar **desde cuándo cuentan los 60 días** del mensual: ¿desde el anticipo o desde el
+  go-live?
+
+### Lo que hay que decirle aunque no pregunte
+
+- **Bre-B no se puede ofrecer para cobrar.** Limitación de Wompi, no nuestra. Decirlo antes de
+  que lo descubra él vale más que el método.
+- **"Nequi sin cargo de pasarela" no está cumplido hoy**: el precio se fija antes de que el
+  comprador elija método, así que la comisión se cobra parejo. Hay que decidir si se ajusta el
+  alcance o se construye después.
+- **Los carritos abandonados y el portal fueron extras.** No estaban en la propuesta (que
+  prometía "página de esa noche", no casa central). Mencionarlo una vez, sin cobrarlo.
+
+### Ojo con la demo
+
+- Abrir la URL 3 minutos antes, por el arranque en frío (si no se subió Render a Starter).
+- **No reiniciar nada a mitad de demo.**
+- Mostrarlo en el celular de Daniel, que es como lo va a ver su gente.
+- El momento fuerte es comprar en vivo y que aparezca el QR. Dejarlo respirar.
+
 ## Costos de infraestructura y por qué NO migramos de Vercel
 
 Calculado el 5 sep con TRM ~$3.141/USD. Sirve para sustentar el mensual de $250.000 frente a
