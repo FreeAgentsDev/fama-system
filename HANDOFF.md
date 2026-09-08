@@ -167,6 +167,60 @@ cd server && pnpm test                    # 53 tests
   propia de Miguel, no la de Daniel — así se hace a propósito, ver doc de Wompi:
   sandbox y producción son ambientes completamente separados).
 
+## Costos de infraestructura y por qué NO migramos de Vercel
+
+Calculado el 5 sep con TRM ~$3.141/USD. Sirve para sustentar el mensual de $250.000 frente a
+Daniel sin tener que rehacer las cuentas.
+
+| Servicio | Plan que se necesita de verdad | USD/mes | COP/mes |
+|---|---|---|---|
+| Vercel | **Pro** — no Hobby, ver abajo | $20 | ~$63.000 |
+| Render | **Starter** — no Free, ver abajo | $7 | ~$22.000 |
+| Firestore | Spark (gratis) | $0 | $0 |
+| Dominio propio (si Daniel lo quiere) | | ~$1 | ~$3.000 |
+| | **Total** | **~$28** | **~$88.000** |
+
+Contra $250.000 al mes eso deja **~65% de margen**. Sostenible.
+
+**El costo real no son los servidores, son las horas.** $250.000 son unas 2 o 3 horas de
+trabajo. Si Daniel llama más que eso al mes, el margen se lo come el soporte. Por eso importa
+acordar con él qué cubre el mensual — el panel existe para que **él** cargue sus fechas.
+
+### Los dos planes gratis son deuda, no ahorro
+
+- **Vercel Hobby prohíbe el uso comercial**, y este caso encaja dos veces: la definición cubre
+  procesar pagos de los visitantes y también que un consultor pagado escriba el código.
+  Vercel se reserva desactivar un proyecto Hobby sin aviso. Traducido: pueden tumbar el sitio
+  un viernes por la noche mientras Fama vende. Los $63.000 compran quitarse eso de encima.
+- **Render Free se duerme a los 15 min** y el primer request después tarda ~50 s (lo dice el
+  propio panel de Render). Alguien abre el link desde Instagram, ve una pantalla en blanco y
+  se va. No cuesta infraestructura: le cuesta ventas a Daniel, que es con lo que él va a
+  juzgar el sistema.
+
+### Alternativas evaluadas y descartadas (5 sep)
+
+- **Consolidar todo en Render** ($14/mes, ~$44.000): ahorra ~$41.000 al mes. Es la mejor
+  opción a futuro — un proveedor, una factura, y ya sabemos que Render funciona. **No se hizo
+  antes de la demo**: migrar el frontend sobre un Next.js que advierte "este NO es el Next.js
+  que conoces", con la cadena de pago recién verificada, no compensa por $41.000. Vale la pena
+  reconsiderarlo después del primer pago.
+- **Netlify free**: sí permite uso comercial (sólo prohíbe revender hosting), pero sus
+  términos dejan terminar el servicio gratuito "sin causa, de forma inmediata". Es el mismo
+  riesgo de Hobby con otro nombre. No es donde debe vivir el checkout.
+- **Cloudflare Workers**: el adaptador de OpenNext documenta Next 14 y 15; acá se usa 16.3.4.
+  Eso es investigación, no migración.
+
+**Ojo con Vercel Pro: se cobra por miembro del equipo.** Con una persona son $20; si entra
+alguien más de FreeAgents a esa cuenta, se duplica — y ahí consolidar en Render pasa a ser
+claramente mejor.
+
+### Techo del diseño actual
+
+Los tickets viven **dentro** del documento del evento, y listar la cartelera trae todos los
+eventos completos (`allEvents()` filtra en memoria, a propósito: con 3 eventos no justifica
+índices). Con 50 eventos y 150 boletas cada uno, cada visita a la home descargaría varios
+megas. No es problema este año, pero es el límite del modelo de datos.
+
 ## Plan comercial para el lunes (contexto, no código)
 
 - **Objetivo:** demo en vivo + pedir el primer pago.
